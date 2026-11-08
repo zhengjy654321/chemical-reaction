@@ -1,6 +1,6 @@
 // 反应引擎入口（B 负责）。约定见 CONTRACT.md 第 5 节。
 import { clone, addTo } from '../state.js';
-import { specialRule } from './special.js';
+import { specialRule } from './special.js?v=3';
 import { precipitationRule } from './precipitation.js';
 import { acidBaseRule } from './acidbase.js';
 import { displacementRule } from './displacement.js';

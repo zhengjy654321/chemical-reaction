@@ -1,8 +1,10 @@
 // 应用入口（C 负责）。持有状态，调用 state.js 和引擎，把结果交给 render。
-import { DATA } from './data.js';
-import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js?v=2';
-import { react } from './engine/index.js?v=2';
-import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js?v=2';
+import { DATA } from './data.js?v=3';
+import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js?v=3';
+import { react } from './engine/index.js?v=3';
+import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js?v=3';
+import { EXPLOSIONS, loadExplosion, triggerExplosion, maxIntensity, triggerLabel } from './explosions.js?v=3';
+import { play as playFx, setMuted } from './fx.js?v=3';
 import { MODES, DROP_ML, fromPos } from './amount.js';
 
 const STORE_KEY = 'chem-lab-v1';
@@ -14,7 +16,7 @@ function freshApp() {
     selected: 'b1',
     counter: 2,
     log: [],
-    ui: { reagent: null, form: 'aq', cat: 'all', search: '', pourTo: null, amt: { conc: 1 } },
+    ui: { reagent: null, form: 'aq', cat: 'all', search: '', pourTo: null, amt: { conc: 1 }, boomOpen: false, armed: null, mute: false },
   };
 }
 
@@ -33,6 +35,8 @@ function save() {
 
 let app = load();
 if (app.ui.reagent && !DATA.SUBSTANCES[app.ui.reagent]) app.ui.reagent = null;
+setMuted(app.ui.mute);
+let pendingFx = null; // 下一次画完界面后要播放的特效 { id, level, reactionId }
 
 const idx = id => app.beakers.findIndex(b => b.id === (id ?? app.selected));
 const current = () => app.beakers[idx()];
@@ -55,14 +59,35 @@ function run(i, extra = {}) {
   }
 }
 
+// 运行反应并记录；猛烈的反应排队播放特效，等级 3（爆炸）会把烧杯炸碎。
 function act(title, i, extra) {
   const events = run(i, extra);
-  logEntry(title, events, events.length ? '' : '无明显反应现象');
+  const level = maxIntensity(events);
+  let note = events.length ? '' : '无明显反应现象';
+  if (level) {
+    const top = events.find(e => (e.intensity || 0) === level);
+    const b = app.beakers[i];
+    pendingFx = { id: b.id, level, reactionId: top?.reactionId };
+    if (level >= 3) {
+      app.beakers[i] = { ...b, broken: true, heated: false };
+      note = `💥 ${b.label} 被炸碎了！点「清空」可以换一个新的`;
+    }
+  }
+  if (app.ui.armed?.id === app.beakers[i].id && level) app.ui.armed = null;
+  logEntry(title, events, note);
+}
+
+// 已炸碎的容器不能再用
+function broken(i) {
+  if (!app.beakers[i]?.broken) return false;
+  logEntry(`${app.beakers[i].label} 已经炸碎了`, [], '先点「清空」换一个新的，或者点「移除」');
+  draw();
+  return true;
 }
 
 function addReagent(isDrop) {
   const i = idx(); const r = DATA.SUBSTANCES[app.ui.reagent];
-  if (i < 0 || !r) return;
+  if (i < 0 || !r || broken(i)) return;
   const solid = app.ui.form === 's' && canBeSolid(r);
   const st = amountState(app, r, solid);
   const vol = isDrop ? DROP_ML : st.value;
@@ -116,7 +141,7 @@ const handlers = {
   addAmount() { addReagent(false); },
 
   heat() {
-    const i = idx(); if (i < 0) return;
+    const i = idx(); if (i < 0 || broken(i)) return;
     const on = !app.beakers[i].heated;
     app.beakers[i] = { ...app.beakers[i], heated: on };
     if (on) act(`加热 ${app.beakers[i].label}`, i);
@@ -125,17 +150,56 @@ const handlers = {
   },
 
   ignite() {
-    const i = idx(); if (i < 0) return;
+    const i = idx(); if (i < 0 || broken(i)) return;
     act(`点燃 ${app.beakers[i].label} 中的物质`, i, { ignite: true });
     draw();
   },
 
+  light() {
+    const i = idx(); if (i < 0 || broken(i)) return;
+    act(`用强光照射 ${app.beakers[i].label}`, i, { light: true });
+    draw();
+  },
+
+  // 爆炸反应面板
+  boomPanel() { app.ui.boomOpen = !app.ui.boomOpen; draw(); },
+  mute() { app.ui.mute = !app.ui.mute; setMuted(app.ui.mute); draw(); },
+  // 选一个爆炸实验：装好反应物，放到新容器里等待引发
+  boomLoad(pid) {
+    const p = EXPLOSIONS.find(x => x.id === pid); if (!p) return;
+    const id = newId();
+    const kind = p.water ? '烧杯' : p.load.every(([, , f]) => f === 'g') ? '集气瓶' : p.load.some(([, , f]) => f === 'g') ? '燃烧瓶' : '试管';
+    const b = loadExplosion(p, id, `${kind} ${app.counter}`, DATA);
+    app.beakers.push(b);
+    app.selected = id;
+    app.ui.armed = { id, preset: p.id };
+    app.ui.boomOpen = false;
+    const what = p.load.map(([sid]) => nameOf(sid)).join('、') || '50 mL 水';
+    logEntry(`准备实验：${p.title}`, [], `已在“${b.label}”中装入${what}。点烧杯上的「${triggerLabel(p.trigger)}」引发反应`);
+    draw();
+    setTimeout(() => root.querySelector(`.beaker[data-arg="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+  },
+  // 点烧杯上的触发按钮
+  fire(id) {
+    const i = idx(id); const p = EXPLOSIONS.find(x => x.id === app.ui.armed?.preset);
+    if (i < 0 || !p || app.ui.armed.id !== id || broken(i)) return;
+    app.selected = id;
+    const { beaker, ctx } = triggerExplosion(p, app.beakers[i], DATA);
+    app.beakers[i] = beaker;
+    const t = p.trigger;
+    const title = t.type === 'add' ? `向 ${beaker.label} 中投入一小块${nameOf(t.id)}`
+      : t.type === 'light' ? `用强光照射 ${beaker.label}` : `${triggerLabel(t)} ${beaker.label} 中的物质`;
+    act(title, i, ctx);
+    app.ui.armed = null;
+    draw();
+  },
+
   pour(frac) {
-    const i = idx(); if (i < 0) return;
+    const i = idx(); if (i < 0 || broken(i)) return;
     const sel = root.querySelector('#pourTo');
     const toId = sel?.value || app.ui.pourTo;
     const j = idx(toId);
-    if (j < 0 || j === i) return;
+    if (j < 0 || j === i || broken(j)) return;
     const f = Number(frac) || 1;
     const r = pour(app.beakers[i], app.beakers[j], f);
     app.beakers[i] = r.from; app.beakers[j] = r.to;
@@ -177,7 +241,8 @@ const handlers = {
     const i = idx(); if (i < 0) return;
     const b = app.beakers[i];
     app.beakers[i] = createBeaker(b.id, b.label);
-    logEntry(`清空 ${b.label}，重新装入 50 mL 水`);
+    if (app.ui.armed?.id === b.id) app.ui.armed = null;
+    logEntry(`${b.broken ? '扫掉碎片，换一个新容器' : '清空 ' + b.label}，装入 50 mL 水`);
     draw();
   },
 
@@ -208,5 +273,10 @@ const handlers = {
 function draw() {
   render(app, root, handlers);
   save();
+  if (pendingFx) {
+    const fx = pendingFx; pendingFx = null;
+    const el = root.querySelector(`.beaker[data-arg="${fx.id}"] .beaker-stage`);
+    try { playFx(fx.level, el, fx.reactionId); } catch (err) { console.error(err); }
+  }
 }
 draw();

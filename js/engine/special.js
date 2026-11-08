@@ -3,12 +3,13 @@ import { clone, addTo } from '../state.js';
 import { amountOf, addProduct, formulaOf, markFor, aqTerm, molTerm, counterIon, charge, marks, sinkOf } from './common.js';
 import { balance } from '../equation.js';
 
-const CONDITION_LABEL = { none: '', heat: '加热', ignite: '点燃', electrolysis: '通电' };
+const CONDITION_LABEL = { none: '', heat: '加热', ignite: '点燃', electrolysis: '通电', light: '光照' };
 
 function conditionMet(r, beaker, ctx) {
   if (r.condition === 'heat' && !(ctx.heated || beaker.heated)) return false;
   if (r.condition === 'ignite' && !ctx.ignite) return false;
   if (r.condition === 'electrolysis' && !ctx.electrolysis) return false;
+  if (r.condition === 'light' && !ctx.light) return false;
   if (r.catalyst && amountOf(beaker, r.catalyst).n === 0) return false;
   return true;
 }
@@ -94,6 +95,7 @@ export function specialRule(beaker, ctx) {
         observations: r.observations || [],
         extent,
         reactionId: r.id,
+        intensity: r.intensity || 0,
       },
     };
   }

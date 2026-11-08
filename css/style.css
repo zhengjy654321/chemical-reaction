@@ -329,3 +329,59 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* ===== 爆炸反应面板与特效 ===== */
+.boom-open { margin-left: auto; align-self: center; font-weight: 700; color: #fff7ed; border: 0;
+  background: linear-gradient(135deg, #f97316, #dc2626); box-shadow: 0 6px 20px -6px rgba(249, 115, 22, .7); }
+@media (hover: hover) { button.boom-open:hover:not(:disabled) { background: linear-gradient(135deg, #fb923c, #ef4444); } }
+.tag.armed { background: rgba(239, 68, 68, .18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, .4); margin-left: 6px; animation: pulse 1.2s ease-in-out infinite; }
+.tag.broken { background: rgba(148, 163, 184, .15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, .3); margin-left: 6px; }
+.beaker.is-armed { border-color: rgba(239, 68, 68, .55) !important; box-shadow: 0 0 0 1px rgba(239, 68, 68, .35), 0 0 28px -6px rgba(239, 68, 68, .6); }
+.arm-btn { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 2; white-space: nowrap;
+  font-size: 17px; font-weight: 800; padding: 12px 18px; border-radius: 999px; border: 0; color: #fff;
+  background: linear-gradient(135deg, #f97316, #dc2626); box-shadow: 0 0 0 0 rgba(239, 68, 68, .7); animation: armPulse 1.3s ease-out infinite; }
+.arm-btn.lv1 { background: linear-gradient(135deg, #f59e0b, #ea580c); }
+@keyframes armPulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, .7); } 100% { box-shadow: 0 0 0 18px rgba(239, 68, 68, 0); } }
+.beaker-svg.broken .shard { fill: rgba(220, 235, 255, .55); stroke: rgba(255, 255, 255, .7); stroke-width: .4; }
+.beaker-svg.broken .crack { stroke: rgba(255, 255, 255, .6); stroke-width: .6; fill: none; }
+.beaker-svg.broken .broken-txt { fill: #fca5a5; font-size: 11px; font-weight: 700; }
+
+.modal { position: fixed; inset: 0; z-index: 900; background: rgba(2, 6, 16, .72); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+.modal-card { width: min(920px, 100%); background: var(--bg2); border: 1px solid var(--line-hi); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); }
+.modal-head { display: flex; align-items: center; gap: 8px; }
+.modal-head h2 { margin: 0 auto 0 0; font-size: 19px; }
+.modal-card > p { font-size: 13px; line-height: 1.6; }
+.lv-h { font-size: 14px; margin: 18px 0 8px; }
+.lv-h.lv3 { color: #fca5a5; } .lv-h.lv2 { color: #fdba74; } .lv-h.lv1 { color: #fde68a; }
+.boom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.boom-item { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+.boom-item.lv3 { border-color: rgba(239, 68, 68, .3); } .boom-item.lv2 { border-color: rgba(251, 146, 60, .3); }
+.boom-item .eq { font-size: 14px; margin: 0; overflow-x: auto; }
+.boom-item .bi-tip { font-size: 12px; line-height: 1.5; }
+.boom-item button { margin-top: auto; }
+.bi-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.lv-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.lv-badge.lv3 { background: rgba(239, 68, 68, .2); color: #fca5a5; }
+.lv-badge.lv2 { background: rgba(251, 146, 60, .2); color: #fdba74; }
+.lv-badge.lv1 { background: rgba(250, 204, 21, .18); color: #fde68a; }
+
+.fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 1000; overflow: hidden; }
+.fx-layer > div { position: absolute; will-change: transform, opacity; }
+.fx-flash { inset: 0; left: 0 !important; top: 0 !important; width: 100%; height: 100%; mix-blend-mode: screen; opacity: 0; }
+.fx-ring { width: 60px; height: 60px; border-radius: 50%; border: 3px solid; opacity: 0; }
+.fx-fireball { width: 120px; height: 120px; border-radius: 50%; opacity: 0; filter: blur(2px); }
+.fx-spark { width: 4px; height: 4px; border-radius: 50%; }
+.fx-shard { background: linear-gradient(135deg, rgba(240, 248, 255, .9), rgba(160, 200, 240, .45)); box-shadow: inset 0 0 2px #fff; }
+.fx-smoke { border-radius: 50%; filter: blur(10px); opacity: 0; }
+.fx-flame { width: 18px; height: 26px; border-radius: 50% 50% 45% 45%; opacity: 0; filter: blur(1px); mix-blend-mode: screen; }
+.fx-shake-3 { animation: shake3 .7s cubic-bezier(.36, .07, .19, .97); }
+.fx-shake-2 { animation: shake2 .4s ease-out; }
+.fx-shake-1 { animation: shake1 .13s linear 10; }
+@keyframes shake3 { 0%, 100% { transform: none; } 10% { transform: translate(-12px, 8px); } 20% { transform: translate(11px, -9px); } 30% { transform: translate(-9px, -6px); } 45% { transform: translate(7px, 6px); } 60% { transform: translate(-4px, 3px); } 80% { transform: translate(2px, -2px); } }
+@keyframes shake2 { 0%, 100% { transform: none; } 20% { transform: translate(-5px, 3px); } 45% { transform: translate(4px, -3px); } 70% { transform: translate(-2px, 1px); } }
+@keyframes shake1 { 0%, 100% { transform: none; } 25% { transform: translate(-2px, 1px) rotate(-.6deg); } 75% { transform: translate(2px, -1px) rotate(.6deg); } }
+@media (max-width: 560px) { .sec-head { flex-wrap: wrap; } .boom-grid { grid-template-columns: 1fr; } }
+.beaker-head .tag { white-space: nowrap; }
+.modal-head button { white-space: nowrap; }
+@media (max-width: 560px) { .modal { padding: 12px 10px; } .modal-card { padding: 14px; } .modal-head h2 { font-size: 17px; } }

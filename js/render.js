@@ -1,6 +1,8 @@
 // 渲染（C 负责）。render(app, root, handlers) 只读状态，不改状态。
 import { formatFormula, formatEquation } from './equation.js';
-import { DATA } from './data.js';
+import { DATA } from './data.js?v=3';
+import { react } from './engine/index.js?v=3';
+import { EXPLOSIONS, LEVEL_LABEL, loadExplosion, triggerExplosion, triggerLabel } from './explosions.js?v=3';
 import { MODES, CONCS, DROP_ML, modeOf, molesOf, toPos, fmtAmt } from './amount.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -123,7 +125,28 @@ function rnd(seed) {
   return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
 }
 
+// 炸碎的烧杯：只剩下锯齿状的杯底和散落的碎片，石棉网上有焦黑痕迹
+function brokenSvg(b) {
+  const R = rnd(b.id + 'broken');
+  const bits = Array.from({ length: 9 }, () => {
+    const x = 14 + R() * 92, y = 132 + R() * 6, w = 3 + R() * 7;
+    return `<path d="M${x.toFixed(1)} ${y.toFixed(1)} l${w.toFixed(1)} ${(-1 - R() * 3).toFixed(1)} l${(-R() * 3).toFixed(1)} ${(3 + R() * 2).toFixed(1)} Z" class="shard"/>`;
+  }).join('');
+  return `
+  <svg viewBox="0 0 120 172" class="beaker-svg broken" aria-hidden="true">
+    <ellipse cx="60" cy="138" rx="46" ry="6" fill="#000" opacity=".55" class="scorch"/>
+    <g class="stand"><path d="M22 141 L12 172 M98 141 L108 172 M60 141 L60 150" /></g>
+    <rect x="10" y="138.5" width="100" height="3" rx="1" class="gauze"/>
+    <path d="M24 112 L29 104 L33 115 L39 99 L45 113 L52 106 L58 118 L66 102 L72 114 L79 100 L85 112 L90 104 L96 110 L96 130 Q96 138 88 138 L32 138 Q24 138 24 130 Z" fill="url(#bk-glass)"/>
+    <path d="M24 112 L29 104 L33 115 L39 99 L45 113 L52 106 L58 118 L66 102 L72 114 L79 100 L85 112 L90 104 L96 110 L96 130 Q96 138 88 138 L32 138 Q24 138 24 130 Z" class="glass"/>
+    <path d="M40 120 l6 -4 M70 126 l5 3 M55 131 l-4 -5" class="crack"/>
+    ${bits}
+    <text x="60" y="70" class="broken-txt" text-anchor="middle">已炸碎</text>
+  </svg>`;
+}
+
 function beakerSvg(b) {
+  if (b.broken) return brokenSvg(b);
   const ml = volumeMl(b);
   const hasLiquid = ml > 0.5 || Object.keys(b.ions).length || Object.keys(b.dissolved).length;
   const liqH = hasLiquid ? Math.min(FULL_H, Math.max(10, ml / FULL_ML * FULL_H)) : 0;
@@ -247,13 +270,25 @@ function contents(b) {
 }
 
 // ---------- 各区块 ----------
+const TRIGGER_ICON = { ignite: '🔥', light: '☀️', add: '👇' };
+function armedHtml(app, b) {
+  const a = app.ui.armed;
+  if (!a || a.id !== b.id || b.broken) return '';
+  const p = EXPLOSIONS.find(x => x.id === a.preset);
+  if (!p) return '';
+  return `<button class="arm-btn lv${p.level}" data-act="fire" data-arg="${b.id}">${TRIGGER_ICON[p.trigger.type] || '💥'} ${esc(triggerLabel(p.trigger))}</button>`;
+}
+
 function beakersHtml(app) {
-  return app.beakers.map(b => `
-    <div class="beaker ${b.id === app.selected ? 'selected' : ''} ${b.heated ? 'is-hot' : ''}" data-act="select" data-arg="${b.id}">
-      <div class="beaker-head"><strong>${esc(b.label)}</strong>${b.heated ? '<span class="tag hot">加热中</span>' : ''}</div>
-      <div class="beaker-stage">${gasTag(b)}${beakerSvg(b)}</div>
+  return app.beakers.map(b => {
+    const armed = armedHtml(app, b);
+    return `
+    <div class="beaker ${b.id === app.selected ? 'selected' : ''} ${b.heated ? 'is-hot' : ''} ${b.broken ? 'is-broken' : ''} ${armed ? 'is-armed' : ''}" data-act="select" data-arg="${b.id}">
+      <div class="beaker-head"><strong>${esc(b.label)}</strong>${b.heated ? '<span class="tag hot">加热中</span>' : ''}${armed ? '<span class="tag armed">待引发</span>' : ''}${b.broken ? '<span class="tag broken">已炸碎</span>' : ''}</div>
+      <div class="beaker-stage">${gasTag(b)}${beakerSvg(b)}${armed}</div>
       <ul class="contents">${contents(b)}</ul>
-    </div>`).join('') + `
+    </div>`;
+  }).join('') + `
     <div class="beaker add-card">
       <button data-act="newBeaker" data-arg="water"><span class="plus">＋</span><span>新烧杯<small>装 50 mL 水</small></span></button>
       <button data-act="newBeaker" data-arg="empty"><span class="plus">＋</span><span>空试管<small>用来放固体</small></span></button>
@@ -290,6 +325,7 @@ const ICON = {
   clear: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
   remove: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   pour: '<svg viewBox="0 0 24 24"><path d="M4 6h10l-1 12H5zM14 9c3 0 5 2 6 6"/></svg>',
+  light: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
   collect: '<svg viewBox="0 0 24 24"><path d="M8 3h8M9 3v4l-4 6v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6l-4-6V3"/><circle cx="11" cy="15" r="1.2"/><circle cx="14" cy="12" r="1"/></svg>',
 };
 
@@ -313,6 +349,7 @@ function actionsHtml(app) {
     <div class="tools">
       <button data-act="heat" class="${b.heated ? 'hot' : ''}">${ICON.heat}<span>${b.heated ? '停止加热' : '加热'}</span></button>
       <button data-act="ignite">${ICON.ignite}<span>点燃</span></button>
+      <button data-act="light" title="用强光照射（如氢气和氯气的混合气体）">${ICON.light}<span>光照</span></button>
       <button data-act="filter">${ICON.filter}<span>过滤</span></button>
       <button data-act="collect" ${Object.keys(b.gases).length ? '' : 'disabled'} title="把刚产生的气体收集到集气瓶">${ICON.collect}<span>收集气体</span></button>
       <button data-act="clear">${ICON.clear}<span>清空</span></button>
@@ -394,11 +431,51 @@ function logHtml(app) {
   }).join('');
 }
 
+// 爆炸反应面板：按猛烈程度分组，每项显示方程式，点「装入」后等待引发
+const previewCache = new Map();
+function previewEq(p) {
+  if (!previewCache.has(p.id)) {
+    let eq = null;
+    try {
+      const b = loadExplosion(p, 'pv', 'pv', DATA);
+      const { beaker, ctx } = triggerExplosion(p, b, DATA);
+      const ev = react(beaker, { data: DATA, heated: false, ignite: false, ...ctx }).events.find(e => e.reactionId === p.reaction);
+      eq = ev?.equation || null;
+    } catch { /* 预览失败就不显示方程式 */ }
+    previewCache.set(p.id, eq);
+  }
+  return previewCache.get(p.id);
+}
+function boomPanelHtml(app) {
+  if (!app.ui.boomOpen) return '';
+  const groups = [3, 2, 1].map(lv => {
+    const items = EXPLOSIONS.filter(p => p.level === lv);
+    return `<h3 class="lv-h lv${lv}">${['', '剧烈反应', '爆鸣', '爆炸（会把容器炸碎）'][lv]}</h3>
+      <div class="boom-grid">${items.map(p => {
+        const eq = previewEq(p);
+        return `<div class="boom-item lv${p.level}">
+          <div class="bi-top"><b>${esc(p.title)}</b><span class="lv-badge lv${p.level}">${LEVEL_LABEL[p.level]}</span></div>
+          ${eq ? `<div class="eq">${equationHtml(eq)}</div>` : ''}
+          ${p.tip ? `<div class="muted bi-tip">${esc(p.tip)}</div>` : ''}
+          <button class="primary" data-act="boomLoad" data-arg="${p.id}">装入，等待${esc(triggerLabel(p.trigger))}</button>
+        </div>`;
+      }).join('')}</div>`;
+  }).join('');
+  return `<div class="modal" data-act="boomPanel">
+    <div class="modal-card" data-act="noop">
+      <div class="modal-head"><h2>💥 爆炸与剧烈反应</h2>
+        <button class="small" data-act="mute" title="开关声音">${app.ui.mute ? '🔇 静音' : '🔊 有声'}</button>
+        <button class="small" data-act="boomPanel">关闭</button></div>
+      <p class="muted">点「装入」后，反应物会放进一个新容器里等着；再点容器上的按钮（点燃、光照、投入金属）就会引发反应。真实实验中这些都非常危险，只能在这里看。</p>
+      ${groups}
+    </div></div>`;
+}
+
 export function render(app, root, handlers) {
   const keepScroll = root.querySelector('.shelf-list')?.scrollTop || 0;
   root.innerHTML = `${SVG_DEFS}
     <section class="bench">
-      <div class="sec-head"><h2>实验台</h2><span class="muted">点选烧杯后再加试剂</span></div>
+      <div class="sec-head"><h2>实验台</h2><span class="muted">点选烧杯后再加试剂</span><button class="boom-open" data-act="boomPanel">💥 爆炸反应</button></div>
       <div class="beakers">${beakersHtml(app)}</div>
     </section>
     <section class="panel">
@@ -408,7 +485,8 @@ export function render(app, root, handlers) {
     <section class="card log">
       <div class="log-head"><h2>方程式与现象</h2><button data-act="clearLog" class="small">清空记录</button><button data-act="reset" class="small danger">重置实验台</button></div>
       <div class="entries">${logHtml(app)}</div>
-    </section>`;
+    </section>
+    ${boomPanelHtml(app)}`;
   const list = root.querySelector('.shelf-list');
   if (list) list.scrollTop = keepScroll;
 
