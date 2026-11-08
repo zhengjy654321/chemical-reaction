@@ -6,7 +6,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 
 export const CATEGORIES = [
   ['all', '全部'], ['acid', '酸'], ['base', '碱'], ['salt', '盐'], ['oxide', '氧化物'],
-  ['metal', '金属'], ['nonmetal', '非金属'], ['organic', '有机物'], ['other', '其他'],
+  ['metal', '金属'], ['nonmetal', '非金属'], ['organic', '有机物'], ['gas', '气体'], ['other', '其他'],
 ];
 const FORM_LABEL = { aq: '溶液', s: '固体', l: '液体', g: '气体' };
 
@@ -66,6 +66,7 @@ export function nameOf(id) {
 export function reagentLabel(s) {
   const form = FORM_LABEL[s.shelfForm] || '';
   if (s.shelfForm === 'aq' && /(酸|水|溶液)$/.test(s.name)) return s.name;
+  if (s.shelfForm === 'g' && /气(体)?$/.test(s.name)) return s.name;
   return s.name + (form && s.shelfForm !== 'l' ? form : '');
 }
 
@@ -148,9 +149,10 @@ function beakersHtml(app) {
 function shelfHtml(app) {
   const ui = app.ui;
   const all = Object.values(DATA.SUBSTANCES).filter(s => s.shelf);
-  const cats = CATEGORIES.filter(([k]) => k === 'all' || all.some(s => s.category === k));
+  const inCat = (s, k) => k === 'all' || s.category === k || (k === 'gas' && s.shelfForm === 'g');
+  const cats = CATEGORIES.filter(([k]) => all.some(s => inCat(s, k)));
   const q = (ui.search || '').trim().toLowerCase();
-  const list = all.filter(s => ui.cat === 'all' || s.category === ui.cat);
+  const list = all.filter(s => inCat(s, ui.cat));
   return `
     <div class="chips">${cats.map(([k, t]) => `<button class="chip ${ui.cat === k ? 'on' : ''}" data-act="cat" data-arg="${k}">${t}</button>`).join('')}</div>
     <input id="search" type="search" placeholder="搜索名称或化学式" value="${esc(ui.search || '')}" autocomplete="off">

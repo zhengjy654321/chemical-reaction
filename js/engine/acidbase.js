@@ -5,6 +5,7 @@ import {
   ionPairReaction, runReaction, aqTerm, molTerm, ionTerm, productTerms, sinkOf, counterIon,
   anions, isHeated, describe, WEAK_ANIONS, charge,
 } from './common.js';
+import { hasWater } from '../state.js';
 
 // 不溶于稀酸的硫化物。
 const ACID_PROOF = new Set(['CuS', 'Ag2S', 'PbS', 'HgS']);
@@ -120,7 +121,22 @@ function oxideWater(beaker, ctx) {
   return null;
 }
 
+// 极易溶于水、溶于水就完全电离的气体（HCl 气体）通入水中：HCl = H⁺ + Cl⁻（形成盐酸）。
+function gasDissolve(beaker, ctx) {
+  const { data } = ctx;
+  if (!hasWater(beaker)) return null;
+  for (const id of Object.keys(beaker.gases)) {
+    const g = data.SUBSTANCES[id];
+    if (!g || g.ions) continue;
+    const aq = Object.values(data.SUBSTANCES).find(x => x.formula === g.formula && x.ions && x.soluble && x.id !== id);
+    if (!aq) continue;
+    const r = runReaction(beaker, data, [molTerm(id, data)], Object.keys(aq.ions).map(ionTerm), { kind: 'special' });
+    if (r) return describe(beaker, r, data, [`${g.name}溶于水，形成${aq.name}`]);
+  }
+  return null;
+}
+
 export function acidBaseRule(beaker, ctx) {
-  return neutralize(beaker, ctx) || weakAcid(beaker, ctx) || dissolveSolid(beaker, ctx)
+  return gasDissolve(beaker, ctx) || neutralize(beaker, ctx) || weakAcid(beaker, ctx) || dissolveSolid(beaker, ctx)
     || ammonia(beaker, ctx) || ammonium(beaker, ctx) || oxideWater(beaker, ctx);
 }
