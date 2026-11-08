@@ -1,0 +1,17 @@
+/* 界面样式（C 负责）。骨架只放最基本的布局。 */
+:root { --bg: #f8fafc; --fg: #0f172a; --card: #ffffff; --line: #cbd5e1; --accent: #2563eb; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--fg); }
+header { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+h1 { font-size: 20px; margin: 0; }
+#app { padding: 16px; display: grid; gap: 16px; }
+.beakers { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.beaker { background: var(--card); border: 2px solid var(--line); border-radius: 8px; padding: 8px; cursor: pointer; }
+.beaker.selected { border-color: var(--accent); }
+.beaker .liquid { height: 60px; border-radius: 0 0 6px 6px; margin: 6px 0; }
+.beaker ul { margin: 0; padding-left: 16px; font-size: 13px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.controls select, .controls button { font-size: 16px; padding: 6px 10px; }
+.log { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.log .eq { font-size: 17px; }
+.log .obs { color: #475569; font-size: 14px; }
