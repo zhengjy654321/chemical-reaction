@@ -1,6 +1,6 @@
 // 应用入口（C 负责）。持有状态，调用 state.js 和引擎，把结果交给 render。
 import { DATA } from './data.js';
-import { createBeaker, addSubstance, pour, filter } from './state.js';
+import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js';
 import { react } from './engine/index.js';
 import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js';
 import { MODES, DROP_ML, fromPos } from './amount.js';
@@ -155,6 +155,21 @@ const handlers = {
     res.solids = { ...residue };
     app.beakers.splice(i + 1, 0, res);
     logEntry(`过滤 ${b.label}`, [], `滤渣：${ids.map(nameOf).join('、')}（已放到“${res.label}”）；滤液留在 ${b.label}`);
+    draw();
+  },
+
+  // 收集气体：把选中容器里的气体收集到一个新的集气瓶，按气体性质给出收集方法。
+  collect() {
+    const i = idx(); if (i < 0) return;
+    const b = app.beakers[i];
+    const id = newId();
+    const r = collectGas(b, DATA, id, `集气瓶 ${app.counter}`);
+    if (!r) { logEntry(`收集 ${b.label} 的气体`, [], '没有气体可收集（气体刚产生时点「收集气体」）'); return draw(); }
+    app.beakers[i] = r.from;
+    r.jar.label = `集气瓶 ${app.counter}（${r.gases.map(g => nameOf(g.id)).join('、')}）`;
+    app.beakers.splice(i + 1, 0, r.jar);
+    const how = r.gases.map(g => `${nameOf(g.id)}用${g.methods[0]}${g.methods.length > 1 ? `（也可用${g.methods.slice(1).join('、')}）` : ''}`).join('；');
+    logEntry(`收集 ${b.label} 的气体`, [], `${how}。已收集到“${r.jar.label}”，可以把它倒入别的烧杯，或点燃`);
     draw();
   },
 

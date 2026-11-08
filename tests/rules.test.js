@@ -350,3 +350,25 @@ test('气体之间的反应：两种气体先后通入同一个容器（两种�
   const r = react(addSubstance(b, 'HCl_g', 0.002, DATA), { data: DATA });
   assert.ok(eqs(r.events).includes('NH₃ + HCl = NH₄Cl'));
 });
+
+test('收集气体：按性质选方法，集气瓶里的气体能倒进别的烧杯反应', async () => {
+  const { collectGas, collectMethods, pour } = await import('../js/state.js');
+  assert.deepEqual(collectMethods('O2', DATA), ['排水法', '向上排空气法']);
+  assert.deepEqual(collectMethods('H2', DATA), ['排水法', '向下排空气法']);
+  assert.deepEqual(collectMethods('CO2', DATA), ['向上排空气法']);
+  assert.deepEqual(collectMethods('NH3', DATA), ['向下排空气法']);
+  assert.deepEqual(collectMethods('NO', DATA), ['排水法']);
+  assert.deepEqual(collectMethods('NO2', DATA), ['向上排空气法']);
+  // 大理石和稀盐酸制 CO2，收集后通入石灰水
+  let gen = runReal([['CaCO3', 0.001, { form: 's' }], ['HCl', 0.002]]).beaker;
+  const c = collectGas(gen, DATA, 'j', '集气瓶');
+  assert.ok(Math.abs(c.jar.gases.CO2 - 0.001) < 1e-12);
+  assert.deepEqual(c.from.gases, {});
+  let lime = addSubstance(createBeaker('l', '石灰水'), 'Ca(OH)2', 0.0005, DATA);
+  lime = react(lime, { data: DATA }).beaker;
+  const p = pour(c.jar, lime);
+  assert.deepEqual(p.from.gases, {});
+  const r = react(p.to, { data: DATA });
+  assert.ok(r.events.some(e => e.reactionId === 'co2-caoh2'));
+  assert.equal(collectGas(createBeaker('x', 'x'), DATA), null);
+});
