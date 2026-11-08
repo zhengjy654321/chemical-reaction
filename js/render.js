@@ -69,6 +69,9 @@ export function reagentLabel(s) {
   return s.name + (form && s.shelfForm !== 'l' ? form : '');
 }
 
+// 能以固体形式加入的试剂（试剂架上默认是溶液，但常温是固体）
+export const canBeSolid = s => s.state === 's' && s.shelfForm === 'aq';
+
 const fmtMol = n => n >= 0.1 ? n.toFixed(2) + ' mol' : (n * 1000).toFixed(n < 0.001 ? 2 : 1) + ' mmol';
 
 function volumeMl(b) {
@@ -169,10 +172,14 @@ function actionsHtml(app) {
   if (!b) return '<div class="muted">先点选或新建一个烧杯</div>';
   const r = DATA.SUBSTANCES[app.ui.reagent];
   const others = app.beakers.filter(x => x.id !== b.id);
+  const solidMode = !!r && canBeSolid(r) && app.ui.form === 's';
   return `
     <div class="target">当前：<b>${esc(b.label)}</b>${r ? `　试剂：<b>${esc(reagentLabel(r))}</b> ${formatFormula(r.formula)}` : '　<span class="muted">（在下方选择试剂）</span>'}</div>
+    ${r && canBeSolid(r) ? `<div class="row form-row"><span>形态</span>
+      <button class="chip ${app.ui.form !== 's' ? 'on' : ''}" data-act="form" data-arg="aq">溶液</button>
+      <button class="chip ${app.ui.form === 's' ? 'on' : ''}" data-act="form" data-arg="s">固体</button></div>` : ''}
     <div class="row">
-      ${AMOUNTS.map(([k, t]) => `<button class="${k === 'drop' ? 'primary' : ''}" data-act="add" data-arg="${k}" ${r ? '' : 'disabled'}>${t}</button>`).join('')}
+      ${AMOUNTS.map(([k, t]) => `<button class="${k === 'drop' ? 'primary' : ''}" data-act="add" data-arg="${k}" ${r ? '' : 'disabled'}>${k === 'drop' && solidMode ? '一小粒' : t}</button>`).join('')}
     </div>
     <div class="row">
       <button data-act="heat" class="${b.heated ? 'hot' : ''}">${b.heated ? '停止加热' : '加热'}</button>

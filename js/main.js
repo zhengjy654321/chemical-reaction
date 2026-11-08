@@ -2,7 +2,7 @@
 import { DATA } from './data.js';
 import { createBeaker, addSubstance, pour, filter } from './state.js';
 import { react } from './engine/index.js';
-import { render, AMOUNTS, nameOf, reagentLabel } from './render.js';
+import { render, AMOUNTS, nameOf, reagentLabel, canBeSolid } from './render.js';
 
 const STORE_KEY = 'chem-lab-v1';
 const root = document.getElementById('app');
@@ -13,7 +13,7 @@ function freshApp() {
     selected: 'b1',
     counter: 2,
     log: [],
-    ui: { reagent: null, cat: 'all', search: '', pourTo: null },
+    ui: { reagent: null, form: 'aq', cat: 'all', search: '', pourTo: null },
   };
 }
 
@@ -65,7 +65,8 @@ const handlers = {
   select(id) { app.selected = id; draw(); },
   cat(k) { app.ui.cat = k; draw(); },
   search(q) { app.ui.search = q; save(); },
-  reagent(id) { app.ui.reagent = id; draw(); },
+  reagent(id) { app.ui.reagent = id; app.ui.form = 'aq'; draw(); },
+  form(f) { app.ui.form = f; draw(); },
   pourTo(id) { app.ui.pourTo = id; save(); },
 
   add(kind) {
@@ -73,12 +74,16 @@ const handlers = {
     if (i < 0 || !r) return;
     const [, label, moles] = AMOUNTS.find(a => a[0] === kind) || AMOUNTS[2];
     try {
-      app.beakers[i] = addSubstance(app.beakers[i], r.id, moles, DATA);
+      const solid = app.ui.form === 's' && canBeSolid(r);
+      app.beakers[i] = solid
+        ? addSubstance(app.beakers[i], r.id, moles, DATA, { form: 's' })
+        : addSubstance(app.beakers[i], r.id, moles, DATA);
     } catch (err) {
       logEntry('加入失败', [], err.message); return draw();
     }
-    const verb = kind === 'drop' ? '滴加 1 滴' : `加入${label}`;
-    act(`向 ${app.beakers[i].label} ${verb}${reagentLabel(r)}`, i);
+    const solid = app.ui.form === 's' && canBeSolid(r);
+    const verb = kind === 'drop' && !solid ? '滴加 1 滴' : `加入${kind === 'drop' ? '一小粒' : label}`;
+    act(`向 ${app.beakers[i].label} ${verb}${solid ? r.name + '固体' : reagentLabel(r)}`, i);
     draw();
   },
 
