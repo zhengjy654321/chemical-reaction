@@ -83,6 +83,7 @@ export const REACTIONS = [
     match:   { H2O2: 2 },              // 烧杯里必须同时有的物质/离子 id 及化学计量数
     produce: { H2O: 2, O2: 1 },        // 生成的物质/离子 id 及化学计量数
     condition: 'none',                 // none | heat | ignite | electrolysis
+    conditionText: '高温',              // 可选：显示用的条件文字（'高温' '放电' '光照' 等），有就替代 condition 的默认文字；有催化剂时显示为 'MnO2、高温'
     catalyst: 'MnO2',                  // 可选：必须存在但不消耗
     display: null,                     // 可选：{ reactants: {...}, products: {...} }，用于显示分子方程式（match 里用了离子时填）
     observations: ['产生大量气泡'],
@@ -106,16 +107,20 @@ const beaker = {
   dissolved:{ H2O2: 0.01 },                   // 溶液中不电离的溶质分子
   liquids:  { H2O: 2.78 },                     // 液体（含溶剂水）
   solids:   { BaSO4: 0.01 },                   // 固体（沉淀、金属、粉末）
-  gases:    { },                               // 本次反应刚生成、正在逸出的气体（下一次 react 前清空）
+  gases:    { },                               // 气体：用户通入的 + 本次反应生成正在逸出的
+  escaping: { },                               // 可选，引擎维护：gases 里属于"本次反应生成、正在逸出"的部分
 };
 ```
-数量小于 `1e-9` mol 视为 0 并删除。
+**气体规则**：`react()` 开始时，先从 `gases` 去掉上一次记在 `escaping` 里的量（已经逸出）；剩下的（用户用 `addSubstance` 通入、还没反应完的气体，如 CO₂、H₂、O₂）作为反应物参加反应。本次 `react()` 里生成的气体不再参加本次反应（防止 Ca(HCO₃)₂ 分解出的 CO₂ 又把它溶回去），结束时与剩余气体一起放在 `gases` 里，生成的部分同时记进 `escaping`。界面画"冒气泡"可以用 `escaping`，画"瓶里还有气体"用 `gases`。
+数量小于 `1e-9` mol 视为 0 并删除。没有水（H₂O < 0.05 mol）时，反应生成的可溶固体（如干试管里 KClO₃ 分解得到的 KCl）留在 `solids`，不拆成离子。
 
 ### `js/state.js`（B）
 
 ```js
 createBeaker(id, label, waterMl = 50) -> beaker
-addSubstance(beaker, substanceId, moles, data) -> beaker   // 按 SUBSTANCES 的 ions/soluble/state 放入对应位置
+addSubstance(beaker, substanceId, moles, data, options = {}) -> beaker
+  // 按 SUBSTANCES 的 ions/soluble/state 放入对应位置。
+  // options.form === 's'，或烧杯里没有水（H2O < 0.05 mol，约 1 mL）时，常温为固体的试剂留在 solids（不溶解电离），以便加热分解（KClO3、KMnO4、NaHCO3、NH4Cl…）。
 pour(from, to, fraction = 1) -> { from, to }               // 按比例转移 ions/dissolved/liquids/solids
 filter(beaker) -> { filtrate, residue }                    // filtrate 去掉 solids；residue 是 solids 对象
 isEmpty(beaker) -> boolean
@@ -140,6 +145,7 @@ const { beaker, events } = react(beaker, { heated: false, ignite: false, data })
   extent: 0.01,            // 反应进度 mol
 }
 ```
+- 离子反应（沉淀、中和、放气、置换）都同时给出 `equation`（完整分子方程式，如 `BaCl₂ + H₂SO₄ = BaSO₄↓ + 2HCl`）和 `ionic`。分子方程式里的"配对离子"按溶液里现有的离子猜（优先数量多、且不生成沉淀的），溶液里缺配对离子时 `equation` 为 `null`。
 
 规则模块（`js/engine/*.js`）统一签名：`(beaker, ctx) => null | { beaker, event }`，每次只执行一步。顺序由 `js/engine/index.js` 的 `RULES` 决定：special → precipitation → acidbase → displacement → heating。
 

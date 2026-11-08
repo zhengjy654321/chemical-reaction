@@ -68,20 +68,69 @@ export function checkConservation(eq) {
   return { ok: Object.keys(atoms).length === 0 && charge === 0, atoms, charge };
 }
 
-// 暴力搜索最小整数系数（系数 1..max）。物质多于 6 种时 B 可换成矩阵法。
+// 配平：求元素/电荷矩阵的零空间（有理数高斯消元），得到全正的最小整数系数。
+// 零空间维数不为 1（方程式不唯一）时退回暴力搜索（系数 1..max）。
+const gcd = (a, b) => { a = Math.abs(a); b = Math.abs(b); while (b) [a, b] = [b, a % b]; return a; };
+const frac = (n, d = 1) => { if (d < 0) { n = -n; d = -d; } const g = gcd(n, d) || 1; return [n / g, d / g]; };
+const fsub = (a, b) => frac(a[0] * b[1] - b[0] * a[1], a[1] * b[1]);
+const fmul = (a, b) => frac(a[0] * b[0], a[1] * b[1]);
+const fdiv = (a, b) => frac(a[0] * b[1], a[1] * b[0]);
+
 export function balance(reactants, products, max = 12) {
   const all = [...reactants, ...products];
   const parsed = all.map(parseFormula);
   const k = all.length;
+  const sign = i => (i < reactants.length ? -1 : 1);
+  const els = [...new Set(parsed.flatMap(p => Object.keys(p.atoms)))];
+  const rows = els.map(el => parsed.map((p, i) => sign(i) * (p.atoms[el] || 0)));
+  rows.push(parsed.map((p, i) => sign(i) * p.charge));
+  const m = rows.map(r => r.map(x => frac(x)));
+  // 化为行最简形
+  const pivots = [];
+  let r = 0;
+  for (let c = 0; c < k && r < m.length; c++) {
+    let p = r;
+    while (p < m.length && m[p][c][0] === 0) p++;
+    if (p === m.length) continue;
+    [m[r], m[p]] = [m[p], m[r]];
+    const pv = m[r][c];
+    m[r] = m[r].map(x => fdiv(x, pv));
+    for (let i = 0; i < m.length; i++) {
+      if (i === r || m[i][c][0] === 0) continue;
+      const f = m[i][c];
+      m[i] = m[i].map((x, j) => fsub(x, fmul(f, m[r][j])));
+    }
+    pivots.push(c);
+    r++;
+  }
+  const free = [...Array(k).keys()].filter(c => !pivots.includes(c));
+  if (free.length === 1) {
+    const fc = free[0];
+    const v = new Array(k).fill(null);
+    v[fc] = [1, 1];
+    pivots.forEach((c, i) => { v[c] = frac(-m[i][fc][0], m[i][fc][1]); });
+    const lcm = v.reduce((l, x) => (l * x[1]) / gcd(l, x[1]), 1);
+    let ints = v.map(x => (x[0] * lcm) / x[1]);
+    if (ints.every(x => x < 0)) ints = ints.map(x => -x);
+    if (!ints.every(x => x > 0)) return null;
+    const g = ints.reduce((a, b) => gcd(a, b));
+    return ints.map(x => x / g);
+  }
+  if (free.length === 0) return null;
+  return bruteBalance(parsed, reactants.length, max);
+}
+
+function bruteBalance(parsed, nr, max) {
+  const k = parsed.length;
   const coefs = new Array(k).fill(1);
   const els = [...new Set(parsed.flatMap(p => Object.keys(p.atoms)))];
   const ok = () => {
     let ch = 0;
-    for (let i = 0; i < k; i++) ch += (i < reactants.length ? -1 : 1) * coefs[i] * parsed[i].charge;
+    for (let i = 0; i < k; i++) ch += (i < nr ? -1 : 1) * coefs[i] * parsed[i].charge;
     if (ch !== 0) return false;
     return els.every(el => {
       let s = 0;
-      for (let i = 0; i < k; i++) s += (i < reactants.length ? -1 : 1) * coefs[i] * (parsed[i].atoms[el] || 0);
+      for (let i = 0; i < k; i++) s += (i < nr ? -1 : 1) * coefs[i] * (parsed[i].atoms[el] || 0);
       return s === 0;
     });
   };
