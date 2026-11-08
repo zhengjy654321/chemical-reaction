@@ -1,8 +1,8 @@
 // 应用入口（C 负责）。持有状态，调用 state.js 和引擎，把结果交给 render。
 import { DATA } from './data.js';
-import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js';
-import { react } from './engine/index.js';
-import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js';
+import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js?v=2';
+import { react } from './engine/index.js?v=2';
+import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js?v=2';
 import { MODES, DROP_ML, fromPos } from './amount.js';
 
 const STORE_KEY = 'chem-lab-v1';
