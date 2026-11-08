@@ -15,6 +15,7 @@ const ELEC = { condition: 'electrolysis' };
 const LIGHT = { condition: 'light' };
 // 可选字段 intensity：反应有多猛烈（界面据此播放特效和声音）。
 // 1 剧烈（抖动、火花、火焰）；2 爆鸣（闪光、冲击波、爆鸣声）；3 爆炸（把烧杯炸碎）。
+// 可选字段 quiet：纯净气体在导管口点燃（ctx.quiet）时的现象，此时不爆炸。
 const BOOM = { intensity: 3 }, POP = { intensity: 2 }, WILD = { intensity: 1 };
 
 export const REACTIONS = [
@@ -58,9 +59,11 @@ export const REACTIONS = [
   R('h2o2-heat', '过氧化氢受热分解', { H2O2: 2 }, { H2O: 2, O2: 1 }, { ...HEAT, priority: -1, observations: ['产生气泡'] }),
 
   // ===================== 二、燃烧与化合 =====================
-  R('h2-o2', '氢气燃烧', { H2: 2, O2: 1 }, { H2O: 2 }, { ...FIRE, ...BOOM, observations: ['氢气与氧气混合后点燃，发生爆炸，发出尖锐的爆鸣声', '容器内壁有水珠'] }),
+  R('h2-o2', '氢气燃烧', { H2: 2, O2: 1 }, { H2O: 2 }, { ...FIRE, ...BOOM, observations: ['氢气与氧气混合后点燃，发生爆炸，发出尖锐的爆鸣声', '容器内壁有水珠'],
+    quiet: ['纯净的氢气在导管口安静燃烧，产生淡蓝色火焰', '罩在火焰上方的干冷烧杯内壁有水珠'] }),
   R('c-o2', '碳充分燃烧', { C: 1, O2: 1 }, { CO2: 1 }, { ...FIRE, observations: ['发出白光，放出热量', '生成使澄清石灰水变浑浊的气体'] }),
-  R('co-o2', '一氧化碳燃烧', { CO: 2, O2: 1 }, { CO2: 2 }, { ...FIRE, ...BOOM, observations: ['一氧化碳与氧气混合后点燃，发生爆炸', '火焰呈蓝色'] }),
+  R('co-o2', '一氧化碳燃烧', { CO: 2, O2: 1 }, { CO2: 2 }, { ...FIRE, ...BOOM, observations: ['一氧化碳与氧气混合后点燃，发生爆炸', '火焰呈蓝色'],
+    quiet: ['纯净的一氧化碳在导管口安静燃烧，产生蓝色火焰', '生成能使澄清石灰水变浑浊的气体'] }),
   R('s-o2', '硫燃烧', { S: 1, O2: 1 }, { SO2: 1 }, { ...FIRE, observations: ['在氧气中发出明亮的蓝紫色火焰', '生成有刺激性气味的气体'] }),
   R('p-o2', '红磷燃烧', { P: 4, O2: 5 }, { P2O5: 2 }, { ...FIRE, observations: ['产生大量白烟'] }),
   R('mg-o2', '镁条燃烧', { Mg: 2, O2: 1 }, { MgO: 2 }, { ...FIRE, ...WILD, observations: ['发出耀眼的白光', '生成白色固体'] }),
@@ -70,7 +73,8 @@ export const REACTIONS = [
   R('na-o2-heat', '钠在空气中燃烧', { Na: 2, O2: 1 }, { Na2O2: 1 },
     { ...HEAT, priority: 2, observations: ['钠熔化，发出黄色火焰', '生成淡黄色固体'] }),
   R('na-o2', '钠在空气中缓慢氧化', { Na: 4, O2: 1 }, { Na2O: 2 }, { priority: -1, observations: ['银白色表面变暗'] }),
-  R('ch4-o2', '甲烷燃烧', { CH4: 1, O2: 2 }, { CO2: 1, H2O: 2 }, { ...FIRE, ...BOOM, observations: ['甲烷与氧气混合后点燃，发生爆炸（矿井瓦斯爆炸就是这个反应）', '容器内壁有水珠'] }),
+  R('ch4-o2', '甲烷燃烧', { CH4: 1, O2: 2 }, { CO2: 1, H2O: 2 }, { ...FIRE, ...BOOM, observations: ['甲烷与氧气混合后点燃，发生爆炸（矿井瓦斯爆炸就是这个反应）', '容器内壁有水珠'],
+    quiet: ['纯净的甲烷在导管口安静燃烧，产生淡蓝色火焰', '干冷烧杯内壁有水珠，生成能使澄清石灰水变浑浊的气体'] }),
   R('c2h5oh-o2', '乙醇燃烧', { C2H5OH: 1, O2: 3 }, { CO2: 2, H2O: 3 }, { ...FIRE, observations: ['淡蓝色火焰，放出大量热'] }),
   R('h2-cl2', '氢气在氯气中燃烧', { H2: 1, Cl2: 1 }, { HCl_g: 2 }, { ...FIRE, ...BOOM, observations: ['氢气与氯气混合后点燃，发生爆炸', '瓶口有白雾'] }),
   R('h2-cl2-light', '氢气与氯气混合光照爆炸', { H2: 1, Cl2: 1 }, { HCl_g: 2 }, { ...LIGHT, ...BOOM, observations: ['强光照射下混合气体发生爆炸', '瓶口有白雾'] }),

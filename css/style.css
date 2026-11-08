@@ -385,3 +385,7 @@ input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 
 .beaker-head .tag { white-space: nowrap; }
 .modal-head button { white-space: nowrap; }
 @media (max-width: 560px) { .modal { padding: 12px 10px; } .modal-card { padding: 14px; } .modal-head h2 { font-size: 17px; } }
+.lv-h.lv0 { color: #7dd3fc; }
+.boom-item.lv0 { border-color: rgba(125, 211, 252, .3); }
+.lv-badge.lv0 { background: rgba(125, 211, 252, .18); color: #bae6fd; }
+.arm-btn.lv0 { background: linear-gradient(135deg, #0ea5e9, #2563eb); animation: none; }

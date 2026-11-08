@@ -39,6 +39,15 @@ export const EXPLOSIONS = [
   { id: 'thermite', title: '铝热反应', reaction: 'al-fe2o3', level: 2, water: 0,
     load: [['Al', 0.02, 's'], ['Fe2O3', 0.01, 's']], trigger: { type: 'ignite' },
     tip: '用来焊接钢轨，生成的铁是熔化状态。' },
+  // 对照：纯净气体在导管口点燃，安静燃烧不爆炸（level 0）
+  { id: 'co-quiet', title: '纯净的一氧化碳在导管口点燃', reaction: 'co-o2', level: 0, water: 0,
+    load: [['CO', 0.004, 'g']], trigger: { type: 'nozzle' },
+    tip: '只有一氧化碳、没混氧气，点燃后用的是空气里的氧气，安静燃烧。' },
+  { id: 'h2-quiet', title: '纯净的氢气在导管口点燃', reaction: 'h2-o2', level: 0, water: 0,
+    load: [['H2', 0.004, 'g']], trigger: { type: 'nozzle' },
+    tip: '这就是“验纯”之后点燃氢气的样子。' },
+  { id: 'ch4-quiet', title: '纯净的甲烷在导管口点燃', reaction: 'ch4-o2', level: 0, water: 0,
+    load: [['CH4', 0.002, 'g']], trigger: { type: 'nozzle' } },
   { id: 'na-h2o', title: '钠投入水中', reaction: 'na-h2o', level: 1, water: 50,
     load: [], trigger: { type: 'add', id: 'Na', mol: 0.004, label: '投入钠' } },
   { id: 'fe-o2', title: '铁丝在氧气中燃烧', reaction: 'fe-o2', level: 1, water: 0,
@@ -47,8 +56,8 @@ export const EXPLOSIONS = [
     load: [['Mg', 0.004, 's'], ['O2', 0.003, 'g']], trigger: { type: 'ignite' } },
 ];
 
-export const LEVEL_LABEL = { 1: '剧烈', 2: '爆鸣', 3: '爆炸' };
-export const TRIGGER_LABEL = { ignite: '点燃', light: '光照' };
+export const LEVEL_LABEL = { 0: '安静', 1: '剧烈', 2: '爆鸣', 3: '爆炸' };
+export const TRIGGER_LABEL = { ignite: '点燃', light: '光照', nozzle: '导管口点燃' };
 export const triggerLabel = t => t.label || TRIGGER_LABEL[t.type] || '引发';
 
 // 装好反应物但不引发。气体直接放进容器（不溶到水里），固体保持固态。
@@ -65,7 +74,25 @@ export function loadExplosion(preset, id, label, data) {
 export function triggerExplosion(preset, beaker, data) {
   const t = preset.trigger;
   if (t.type === 'add') return { beaker: addSubstance(beaker, t.id, t.mol, data, { form: 's' }), ctx: {} };
+  if (t.type === 'nozzle') return nozzleIgnite(beaker);
   return { beaker, ctx: { [t.type]: true } };
+}
+
+// 导管口点燃：容器里的可燃气体从导管口导出，在空气中点燃。
+// 纯净（没混氧气）时补上刚好够用的空气中的氧气，安静燃烧（ctx.quiet）；混有氧气时就是普通点燃，会爆炸。
+// 刚生成、正在逸出的气体也算导出来了（例如锌和稀硫酸反应生成的氢气）。
+export const FUELS = { H2: 0.5, CO: 0.5, CH4: 2 }; // 每 mol 燃料需要的 O2
+export function nozzleIgnite(beaker) {
+  const g = beaker.gases || {};
+  const fuels = Object.keys(FUELS).filter(id => (g[id] || 0) > 1e-9);
+  const mixed = (g.O2 || 0) > 1e-9;
+  const b = { ...beaker, gases: { ...g } };
+  if (b.escaping) { b.escaping = { ...b.escaping }; for (const id of [...fuels, 'O2']) delete b.escaping[id]; }
+  if (!fuels.length || mixed) return { beaker: b, ctx: { ignite: true }, fuels, mixed };
+  let need = 0;
+  for (const id of fuels) need += g[id] * FUELS[id];
+  addTo(b.gases, 'O2', need);
+  return { beaker: b, ctx: { ignite: true, quiet: true }, fuels, mixed };
 }
 
 // 一组事件里最猛烈的等级（0 表示没有特别的效果）。

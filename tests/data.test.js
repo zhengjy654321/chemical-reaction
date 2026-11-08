@@ -96,6 +96,7 @@ test('特殊反应：字段完整、条件合法、催化剂不在反应物中',
     for (const n of [...Object.values(r.match), ...Object.values(r.produce)]) assert.ok(Number.isInteger(n) && n > 0, `${r.id} 系数`);
     if (r.catalyst) assert.ok(!(r.catalyst in r.match), `${r.id} 催化剂被消耗`);
     if (r.conditionText !== undefined) assert.equal(typeof r.conditionText, 'string');
+    if (r.quiet !== undefined) assert.ok(Array.isArray(r.quiet) && r.quiet.length > 0, `${r.id} quiet`);
     if (r.intensity !== undefined) assert.ok([1, 2, 3].includes(r.intensity), `${r.id} intensity`);
     if (r.display) {
       for (const id of [...Object.keys(r.display.reactants), ...Object.keys(r.display.products)]) assert.ok(known(id), `${r.id} display: 未知 ${id}`);

@@ -1,8 +1,8 @@
 // 渲染（C 负责）。render(app, root, handlers) 只读状态，不改状态。
 import { formatFormula, formatEquation } from './equation.js';
-import { DATA } from './data.js?v=3';
-import { react } from './engine/index.js?v=3';
-import { EXPLOSIONS, LEVEL_LABEL, loadExplosion, triggerExplosion, triggerLabel } from './explosions.js?v=3';
+import { DATA } from './data.js?v=4';
+import { react } from './engine/index.js?v=4';
+import { EXPLOSIONS, LEVEL_LABEL, loadExplosion, triggerExplosion, triggerLabel } from './explosions.js?v=4';
 import { MODES, CONCS, DROP_ML, modeOf, molesOf, toPos, fmtAmt } from './amount.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -270,7 +270,7 @@ function contents(b) {
 }
 
 // ---------- 各区块 ----------
-const TRIGGER_ICON = { ignite: '🔥', light: '☀️', add: '👇' };
+const TRIGGER_ICON = { ignite: '🔥', light: '☀️', add: '👇', nozzle: '🕯️' };
 function armedHtml(app, b) {
   const a = app.ui.armed;
   if (!a || a.id !== b.id || b.broken) return '';
@@ -325,6 +325,7 @@ const ICON = {
   clear: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
   remove: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   pour: '<svg viewBox="0 0 24 24"><path d="M4 6h10l-1 12H5zM14 9c3 0 5 2 6 6"/></svg>',
+  nozzle: '<svg viewBox="0 0 24 24"><path d="M3 20h9v-6h4M16 14V8"/><path d="M16 2c1.5 2 2.5 3 2.5 4.3a2.5 2.5 0 0 1-5 0C13.5 5 14.5 4 16 2z"/></svg>',
   light: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>',
   collect: '<svg viewBox="0 0 24 24"><path d="M8 3h8M9 3v4l-4 6v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6l-4-6V3"/><circle cx="11" cy="15" r="1.2"/><circle cx="14" cy="12" r="1"/></svg>',
 };
@@ -349,6 +350,7 @@ function actionsHtml(app) {
     <div class="tools">
       <button data-act="heat" class="${b.heated ? 'hot' : ''}">${ICON.heat}<span>${b.heated ? '停止加热' : '加热'}</span></button>
       <button data-act="ignite">${ICON.ignite}<span>点燃</span></button>
+      <button data-act="nozzle" title="把容器里的纯净可燃气体从导管口导出后点燃，安静燃烧不爆炸">${ICON.nozzle}<span>导管口点燃</span></button>
       <button data-act="light" title="用强光照射（如氢气和氯气的混合气体）">${ICON.light}<span>光照</span></button>
       <button data-act="filter">${ICON.filter}<span>过滤</span></button>
       <button data-act="collect" ${Object.keys(b.gases).length ? '' : 'disabled'} title="把刚产生的气体收集到集气瓶">${ICON.collect}<span>收集气体</span></button>
@@ -448,13 +450,13 @@ function previewEq(p) {
 }
 function boomPanelHtml(app) {
   if (!app.ui.boomOpen) return '';
-  const groups = [3, 2, 1].map(lv => {
+  const groups = [3, 2, 1, 0].map(lv => {
     const items = EXPLOSIONS.filter(p => p.level === lv);
-    return `<h3 class="lv-h lv${lv}">${['', '剧烈反应', '爆鸣', '爆炸（会把容器炸碎）'][lv]}</h3>
+    return `<h3 class="lv-h lv${lv}">${['对照：纯净气体安静燃烧，不爆炸', '剧烈反应', '爆鸣', '爆炸（会把容器炸碎）'][lv]}</h3>
       <div class="boom-grid">${items.map(p => {
         const eq = previewEq(p);
         return `<div class="boom-item lv${p.level}">
-          <div class="bi-top"><b>${esc(p.title)}</b><span class="lv-badge lv${p.level}">${LEVEL_LABEL[p.level]}</span></div>
+          <div class="bi-top"><b>${esc(p.title)}</b><span class="lv-badge lv${p.level}">${LEVEL_LABEL[p.level] || '安静'}</span></div>
           ${eq ? `<div class="eq">${equationHtml(eq)}</div>` : ''}
           ${p.tip ? `<div class="muted bi-tip">${esc(p.tip)}</div>` : ''}
           <button class="primary" data-act="boomLoad" data-arg="${p.id}">装入，等待${esc(triggerLabel(p.trigger))}</button>
