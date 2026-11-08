@@ -132,6 +132,10 @@ addSubstance(beaker, substanceId, moles, data, options = {}) -> beaker
   // options.form === 's'，或烧杯里没有水（H2O < 0.05 mol，约 1 mL）时，常温为固体的试剂留在 solids（不溶解电离），以便加热分解（KClO3、KMnO4、NaHCO3、NH4Cl…）。
 pour(from, to, fraction = 1) -> { from, to }               // 按比例转移 ions/dissolved/liquids/solids
 filter(beaker) -> { filtrate, residue }                    // filtrate 去掉 solids；residue 是 solids 对象
+collectGas(beaker, data, jarId, jarLabel) -> { from, jar, gases: [{ id, n, methods }] } | null
+  // 把烧杯里的气体收集到新的集气瓶（无水容器）；methods 是可用的收集方法，第一项推荐（排水法/向上排空气法/向下排空气法）
+collectMethods(id, data) -> ['排水法', '向上排空气法' ...]
+// pour 也会把容器里存着的气体（不含刚生成、正在逸出的 escaping 部分）倒进目标容器，所以集气瓶可以"通入"别的烧杯
 isEmpty(beaker) -> boolean
 ```
 `data` 是 `{ SUBSTANCES, IONS, INSOLUBLE, REACTIONS }`，由 `js/data.js` 汇总导出。

@@ -290,6 +290,7 @@ const ICON = {
   clear: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
   remove: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   pour: '<svg viewBox="0 0 24 24"><path d="M4 6h10l-1 12H5zM14 9c3 0 5 2 6 6"/></svg>',
+  collect: '<svg viewBox="0 0 24 24"><path d="M8 3h8M9 3v4l-4 6v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6l-4-6V3"/><circle cx="11" cy="15" r="1.2"/><circle cx="14" cy="12" r="1"/></svg>',
 };
 
 function actionsHtml(app) {
@@ -313,6 +314,7 @@ function actionsHtml(app) {
       <button data-act="heat" class="${b.heated ? 'hot' : ''}">${ICON.heat}<span>${b.heated ? '停止加热' : '加热'}</span></button>
       <button data-act="ignite">${ICON.ignite}<span>点燃</span></button>
       <button data-act="filter">${ICON.filter}<span>过滤</span></button>
+      <button data-act="collect" ${Object.keys(b.gases).length ? '' : 'disabled'} title="把刚产生的气体收集到集气瓶">${ICON.collect}<span>收集气体</span></button>
       <button data-act="clear">${ICON.clear}<span>清空</span></button>
       <button data-act="remove" class="danger">${ICON.remove}<span>移除</span></button>
     </div>
