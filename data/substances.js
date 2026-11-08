@@ -134,6 +134,7 @@ export const SUBSTANCES = {
   MnCl2:     sol('MnCl2', '氯化锰', 'salt', { 'Mn^2+': 1, 'Cl^-': 2 }, { shelf: false }),
   MnSO4:     sol('MnSO4', '硫酸锰', 'salt', { 'Mn^2+': 1, 'SO4^2-': 1 }, { shelf: false }),
   Na2S:      sol('Na2S', '硫化钠', 'salt', { 'Na^+': 2, 'S^2-': 1 }),
+  K2S:       sol('K2S', '硫化钾', 'salt', { 'K^+': 2, 'S^2-': 1 }, { shelf: false }),
   Na2SO3:    sol('Na2SO3', '亚硫酸钠', 'salt', { 'Na^+': 2, 'SO3^2-': 1 }),
   Na2SiO3:   sol('Na2SiO3', '硅酸钠', 'salt', { 'Na^+': 2, 'SiO3^2-': 1 }, { note: '水溶液俗称水玻璃' }),
   Na3PO4:    sol('Na3PO4', '磷酸钠', 'salt', { 'Na^+': 3, 'PO4^3-': 1 }),

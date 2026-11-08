@@ -12,6 +12,10 @@ const HEAT = { condition: 'heat' };
 const HIGH = { condition: 'heat', conditionText: '高温' };
 const FIRE = { condition: 'ignite' };
 const ELEC = { condition: 'electrolysis' };
+const LIGHT = { condition: 'light' };
+// 可选字段 intensity：反应有多猛烈（界面据此播放特效和声音）。
+// 1 剧烈（抖动、火花、火焰）；2 爆鸣（闪光、冲击波、爆鸣声）；3 爆炸（把烧杯炸碎）。
+const BOOM = { intensity: 3 }, POP = { intensity: 2 }, WILD = { intensity: 1 };
 
 export const REACTIONS = [
   // ===================== 一、催化与受热分解 =====================
@@ -54,21 +58,22 @@ export const REACTIONS = [
   R('h2o2-heat', '过氧化氢受热分解', { H2O2: 2 }, { H2O: 2, O2: 1 }, { ...HEAT, priority: -1, observations: ['产生气泡'] }),
 
   // ===================== 二、燃烧与化合 =====================
-  R('h2-o2', '氢气燃烧', { H2: 2, O2: 1 }, { H2O: 2 }, { ...FIRE, observations: ['淡蓝色火焰', '烧杯内壁有水珠'] }),
+  R('h2-o2', '氢气燃烧', { H2: 2, O2: 1 }, { H2O: 2 }, { ...FIRE, ...BOOM, observations: ['氢气与氧气混合后点燃，发生爆炸，发出尖锐的爆鸣声', '容器内壁有水珠'] }),
   R('c-o2', '碳充分燃烧', { C: 1, O2: 1 }, { CO2: 1 }, { ...FIRE, observations: ['发出白光，放出热量', '生成使澄清石灰水变浑浊的气体'] }),
-  R('co-o2', '一氧化碳燃烧', { CO: 2, O2: 1 }, { CO2: 2 }, { ...FIRE, observations: ['蓝色火焰'] }),
+  R('co-o2', '一氧化碳燃烧', { CO: 2, O2: 1 }, { CO2: 2 }, { ...FIRE, ...BOOM, observations: ['一氧化碳与氧气混合后点燃，发生爆炸', '火焰呈蓝色'] }),
   R('s-o2', '硫燃烧', { S: 1, O2: 1 }, { SO2: 1 }, { ...FIRE, observations: ['在氧气中发出明亮的蓝紫色火焰', '生成有刺激性气味的气体'] }),
   R('p-o2', '红磷燃烧', { P: 4, O2: 5 }, { P2O5: 2 }, { ...FIRE, observations: ['产生大量白烟'] }),
-  R('mg-o2', '镁条燃烧', { Mg: 2, O2: 1 }, { MgO: 2 }, { ...FIRE, observations: ['发出耀眼的白光', '生成白色固体'] }),
-  R('fe-o2', '铁丝在氧气中燃烧', { Fe: 3, O2: 2 }, { Fe3O4: 1 }, { ...FIRE, observations: ['剧烈燃烧，火星四射', '生成黑色固体'] }),
+  R('mg-o2', '镁条燃烧', { Mg: 2, O2: 1 }, { MgO: 2 }, { ...FIRE, ...WILD, observations: ['发出耀眼的白光', '生成白色固体'] }),
+  R('fe-o2', '铁丝在氧气中燃烧', { Fe: 3, O2: 2 }, { Fe3O4: 1 }, { ...FIRE, ...WILD, observations: ['剧烈燃烧，火星四射', '生成黑色固体'] }),
   R('al-o2', '铝在氧气中燃烧', { Al: 4, O2: 3 }, { Al2O3: 2 }, { ...FIRE, observations: ['发出耀眼的白光'] }),
   R('cu-o2', '铜在空气中加热', { Cu: 2, O2: 1 }, { CuO: 2 }, { ...HEAT, observations: ['红色固体逐渐变为黑色'] }),
   R('na-o2-heat', '钠在空气中燃烧', { Na: 2, O2: 1 }, { Na2O2: 1 },
     { ...HEAT, priority: 2, observations: ['钠熔化，发出黄色火焰', '生成淡黄色固体'] }),
   R('na-o2', '钠在空气中缓慢氧化', { Na: 4, O2: 1 }, { Na2O: 2 }, { priority: -1, observations: ['银白色表面变暗'] }),
-  R('ch4-o2', '甲烷燃烧', { CH4: 1, O2: 2 }, { CO2: 1, H2O: 2 }, { ...FIRE, observations: ['淡蓝色火焰', '烧杯内壁有水珠'] }),
+  R('ch4-o2', '甲烷燃烧', { CH4: 1, O2: 2 }, { CO2: 1, H2O: 2 }, { ...FIRE, ...BOOM, observations: ['甲烷与氧气混合后点燃，发生爆炸（矿井瓦斯爆炸就是这个反应）', '容器内壁有水珠'] }),
   R('c2h5oh-o2', '乙醇燃烧', { C2H5OH: 1, O2: 3 }, { CO2: 2, H2O: 3 }, { ...FIRE, observations: ['淡蓝色火焰，放出大量热'] }),
-  R('h2-cl2', '氢气在氯气中燃烧', { H2: 1, Cl2: 1 }, { HCl_g: 2 }, { ...FIRE, observations: ['苍白色火焰', '瓶口有白雾'] }),
+  R('h2-cl2', '氢气在氯气中燃烧', { H2: 1, Cl2: 1 }, { HCl_g: 2 }, { ...FIRE, ...BOOM, observations: ['氢气与氯气混合后点燃，发生爆炸', '瓶口有白雾'] }),
+  R('h2-cl2-light', '氢气与氯气混合光照爆炸', { H2: 1, Cl2: 1 }, { HCl_g: 2 }, { ...LIGHT, ...BOOM, observations: ['强光照射下混合气体发生爆炸', '瓶口有白雾'] }),
   R('na-cl2', '钠在氯气中燃烧', { Na: 2, Cl2: 1 }, { NaCl: 2 }, { ...FIRE, observations: ['黄色火焰', '产生白烟'] }),
   R('fe-cl2', '铁在氯气中燃烧', { Fe: 2, Cl2: 3 }, { FeCl3: 2 }, { ...FIRE, observations: ['产生棕褐色的烟'] }),
   R('cu-cl2', '铜在氯气中燃烧', { Cu: 1, Cl2: 1 }, { CuCl2: 1 }, { ...FIRE, observations: ['产生棕黄色的烟'] }),
@@ -91,7 +96,18 @@ export const REACTIONS = [
   R('fe3o4-co', '一氧化碳还原四氧化三铁', { Fe3O4: 1, CO: 4 }, { Fe: 3, CO2: 4 }, { ...HIGH, observations: ['黑色粉末变为银白（铁粉黑色）'] }),
   R('fe2o3-c', '木炭还原氧化铁', { Fe2O3: 2, C: 3 }, { Fe: 4, CO2: 3 }, { ...HIGH, observations: ['红棕色粉末变为黑色'] }),
   R('fe2o3-h2', '氢气还原氧化铁', { Fe2O3: 1, H2: 3 }, { Fe: 2, H2O: 3 }, { ...HIGH, observations: ['红棕色粉末变为黑色'] }),
-  R('al-fe2o3', '铝热反应', { Al: 2, Fe2O3: 1 }, { Al2O3: 1, Fe: 2 }, { ...FIRE, conditionText: '高温', observations: ['剧烈反应，发出耀眼的光', '有熔融物落下'] }),
+  R('al-fe2o3', '铝热反应', { Al: 2, Fe2O3: 1 }, { Al2O3: 1, Fe: 2 }, { ...FIRE, ...POP, conditionText: '高温', observations: ['剧烈反应，火星四射，发出耀眼的光', '有红热的熔融物落下'] }),
+  // 课本中作为安全知识出现的爆炸反应
+  R('black-powder', '黑火药爆炸', { KNO3: 2, S: 1, C: 3 }, { K2S: 1, N2: 1, CO2: 3 },
+    { ...FIRE, ...BOOM, priority: 2, observations: ['瞬间产生大量气体和热，发生爆炸', '冒出浓烟'] }),
+  R('kclo3-s', '氯酸钾与硫混合物爆炸', { KClO3: 2, S: 3 }, { KCl: 2, SO2: 3 },
+    { ...FIRE, ...BOOM, priority: 2, observations: ['混合物剧烈爆炸', '生成有刺激性气味的气体'] }),
+  R('kclo3-c', '氯酸钾与木炭混合物爆炸', { KClO3: 2, C: 3 }, { KCl: 2, CO2: 3 },
+    { ...FIRE, ...BOOM, priority: 2, observations: ['混合物剧烈爆炸'] }),
+  R('kclo3-p', '氯酸钾与红磷混合物爆炸', { KClO3: 5, P: 6 }, { KCl: 5, P2O5: 3 },
+    { ...FIRE, ...BOOM, priority: 2, observations: ['混合物剧烈爆炸（火柴盒摩擦面就是靠它点火）', '产生大量白烟'] }),
+  R('nh4no3-boom', '硝酸铵受撞击或高温爆炸分解', { NH4NO3: 2 }, { N2: 2, O2: 1, H2O: 4 },
+    { ...FIRE, ...BOOM, priority: 2, conditionText: '撞击或高温', observations: ['硝酸铵瞬间分解，发生猛烈爆炸'] }),
   R('sio2-c', '工业制粗硅', { SiO2: 1, C: 2 }, { Si: 1, CO: 2 }, { ...HIGH, observations: ['生成灰黑色硅'] }),
   R('sio2-cao', '二氧化硅与氧化钙高温反应', { SiO2: 1, CaO: 1 }, { CaSiO3: 1 }, { ...HIGH, observations: ['生成硅酸钙'] }),
   R('c2h5oh-cuo', '乙醇与氧化铜共热', { C2H5OH: 1, CuO: 1 }, { CH3CHO: 1, Cu: 1, H2O: 1 }, { ...HEAT, priority: 1, observations: ['黑色铜丝变红', '有刺激性气味'] }),
@@ -99,9 +115,9 @@ export const REACTIONS = [
 
   // ===================== 四、活泼金属、氧化物与水 =====================
   R('na-h2o', '钠与水反应', { Na: 2, H2O: 2 }, { 'Na^+': 2, 'OH^-': 2, H2: 1 },
-    { display: D({ Na: 2, H2O: 2 }, { NaOH: 2, H2: 1 }), observations: ['钠浮在水面上，熔成小球', '四处游动，发出嘶嘶响声', '滴入酚酞后溶液变红'] }),
+    { ...WILD, display: D({ Na: 2, H2O: 2 }, { NaOH: 2, H2: 1 }), observations: ['钠浮在水面上，熔成小球', '四处游动，发出嘶嘶响声', '滴入酚酞后溶液变红'] }),
   R('k-h2o', '钾与水反应', { K: 2, H2O: 2 }, { 'K^+': 2, 'OH^-': 2, H2: 1 },
-    { display: D({ K: 2, H2O: 2 }, { KOH: 2, H2: 1 }), observations: ['反应比钠更剧烈，产生紫色火焰'] }),
+    { ...POP, display: D({ K: 2, H2O: 2 }, { KOH: 2, H2: 1 }), observations: ['反应比钠更剧烈，钾熔成小球四处游动', '燃烧并产生紫色火焰，伴有轻微爆鸣'] }),
   R('mg-h2o-heat', '镁与热水反应', { Mg: 1, H2O: 2 }, { 'Mg(OH)2': 1, H2: 1 }, { ...HEAT, priority: -2, observations: ['镁条表面产生气泡'] }),
   R('na2o-h2o', '氧化钠与水反应', { Na2O: 1, H2O: 1 }, { 'Na^+': 2, 'OH^-': 2 }, { display: D({ Na2O: 1, H2O: 1 }, { NaOH: 2 }), observations: ['白色固体溶解'] }),
   R('na2o2-h2o', '过氧化钠与水反应', { Na2O2: 2, H2O: 2 }, { 'Na^+': 4, 'OH^-': 4, O2: 1 },

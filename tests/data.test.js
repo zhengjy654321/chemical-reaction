@@ -90,12 +90,13 @@ test('难溶物表：按电荷配比后与产物化学式原子守恒、无重�
 test('特殊反应：字段完整、条件合法、催化剂不在反应物中', () => {
   for (const r of REACTIONS) {
     assert.ok(r.name && r.id, JSON.stringify(r));
-    assert.ok(['none', 'heat', 'ignite', 'electrolysis'].includes(r.condition), `${r.id} condition`);
+    assert.ok(['none', 'heat', 'ignite', 'electrolysis', 'light'].includes(r.condition), `${r.id} condition`);
     assert.ok(Array.isArray(r.observations) && r.observations.length > 0, `${r.id} 缺现象`);
     assert.ok(Object.keys(r.match).length > 0 && Object.keys(r.produce).length > 0, `${r.id} 空`);
     for (const n of [...Object.values(r.match), ...Object.values(r.produce)]) assert.ok(Number.isInteger(n) && n > 0, `${r.id} 系数`);
     if (r.catalyst) assert.ok(!(r.catalyst in r.match), `${r.id} 催化剂被消耗`);
     if (r.conditionText !== undefined) assert.equal(typeof r.conditionText, 'string');
+    if (r.intensity !== undefined) assert.ok([1, 2, 3].includes(r.intensity), `${r.id} intensity`);
     if (r.display) {
       for (const id of [...Object.keys(r.display.reactants), ...Object.keys(r.display.products)]) assert.ok(known(id), `${r.id} display: 未知 ${id}`);
     }

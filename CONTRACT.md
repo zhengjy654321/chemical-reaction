@@ -89,7 +89,8 @@ export const REACTIONS = [
     name: '过氧化氢在二氧化锰催化下分解',
     match:   { H2O2: 2 },              // 烧杯里必须同时有的物质/离子 id 及化学计量数
     produce: { H2O: 2, O2: 1 },        // 生成的物质/离子 id 及化学计量数
-    condition: 'none',                 // none | heat | ignite | electrolysis
+    condition: 'none',                 // none | heat | ignite | electrolysis | light（光照，react 的 ctx.light）
+    intensity: 0,                      // 可选：1 剧烈 | 2 爆鸣 | 3 爆炸（炸碎容器）；引擎原样放进 event.intensity，界面据此播放特效
     conditionText: '高温',              // 可选：显示用的条件文字（'高温' '放电' '光照' 等），有就替代 condition 的默认文字；有催化剂时显示为 'MnO2、高温'
     catalyst: 'MnO2',                  // 可选：必须存在但不消耗
     display: null,                     // 可选：{ reactants: {...}, products: {...} }，用于显示分子方程式（match 里用了离子时填）
