@@ -33,7 +33,8 @@ export function specialRule(beaker, ctx) {
     const b = clone(beaker);
     for (const [id, n] of Object.entries(r.match)) addTo(b[amountOf(beaker, id).phase], id, -n * extent);
     for (const [id, n] of Object.entries(r.produce)) addProduct(b, id, n * extent, data);
-    const cond = r.catalyst ? data.SUBSTANCES[r.catalyst].formula : CONDITION_LABEL[r.condition];
+    const label = r.conditionText || CONDITION_LABEL[r.condition] || '';
+    const cond = r.catalyst ? data.SUBSTANCES[r.catalyst].formula + (label ? `、${label}` : '') : label;
     const src = r.display || { reactants: r.match, products: r.produce };
     const hasIons = Object.keys(r.match).some(id => data.IONS[id]);
     return {

@@ -12,6 +12,7 @@ export function createBeaker(id, label, waterMl = 50) {
 export function clone(beaker) {
   const b = { ...beaker };
   for (const p of PHASES) b[p] = { ...beaker[p] };
+  if (beaker.escaping) b.escaping = { ...beaker.escaping };
   return b;
 }
 
@@ -20,11 +21,15 @@ export function addTo(obj, id, moles) {
   if (v < EPS) delete obj[id]; else obj[id] = v;
 }
 
-export function addSubstance(beaker, substanceId, moles, data) {
+// options.form === 's'，或烧杯里没有水时，固体试剂保持固态（不溶解电离），以便加热分解。
+export function addSubstance(beaker, substanceId, moles, data, options = {}) {
   const b = clone(beaker);
   const sub = data.SUBSTANCES[substanceId];
   if (!sub) throw new Error(`未知物质: ${substanceId}`);
-  if (sub.ions) {
+  const keepSolid = sub.state === 's' && (options.form === 's' || !(b.liquids.H2O > EPS));
+  if (keepSolid) {
+    addTo(b.solids, substanceId, moles);
+  } else if (sub.ions) {
     for (const [ion, n] of Object.entries(sub.ions)) addTo(b.ions, ion, n * moles);
   } else if (sub.soluble && substanceId !== 'H2O') {
     addTo(b.dissolved, substanceId, moles);
