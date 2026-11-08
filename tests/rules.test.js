@@ -109,11 +109,12 @@ test('所有事件都原子守恒、电荷守恒，烧杯里的元素总量不�
 });
 
 test('金属活动性：混合时最不活泼的离子先被最活泼的金属置换', () => {
-  const r = run([['Zn', 0.002], ['Fe', 0.001], ['CuSO4', 0.001], ['AgNO3', 0.002]]);
+  // 用量小一些：Ag⁺ 和 SO4²⁻ 浓度太大时离子积超过 Ag2SO4 的 Ksp，会先析出微溶的 Ag2SO4
+  const r = run([['Zn', 0.001], ['Fe', 0.0005], ['CuSO4', 0.0005], ['AgNO3', 0.001]]);
   assert.equal(eq(r.events[0]), 'Zn + 2AgNO₃ = Zn(NO₃)₂ + 2Ag');
-  assert.ok(close(r.beaker.solids.Ag, 0.002));
-  assert.ok(close(r.beaker.solids.Cu, 0.001));
-  assert.ok(close(r.beaker.solids.Fe, 0.001), '铁没有参加反应');
+  assert.ok(close(r.beaker.solids.Ag, 0.001));
+  assert.ok(close(r.beaker.solids.Cu, 0.0005));
+  assert.ok(close(r.beaker.solids.Fe, 0.0005), '铁没有参加反应');
 });
 
 test('有酸时 NaOH 先中和，再与 Cu²⁺ 沉淀', () => {
@@ -273,4 +274,51 @@ test('气体反应：2NO + O2、3NO2 + H2O、CO 还原 CuO、HCl 溶于水、H2S
   const hcl = realSeq([[[['HCl_g', 0.002]]]]);
   assert.ok(Math.abs(hcl.beaker.ions['H^+'] - 0.002) < 1e-9, 'HCl 气体溶于水成为盐酸');
   assert.ok(one([[[['H2S', 0.002], ['CuSO4', 0.002]]]]).includes('H₂S + CuSO₄ = CuS↓ + H₂SO₄'));
+});
+
+// ---------- 溶度积（真实数据） ----------
+test('Ksp：离子积大于 Ksp 才沉淀，用量多少结果不同', () => {
+  // CaSO4 Ksp 4.9e-5：稀溶液不沉淀，浓溶液部分沉淀
+  let r = runReal([['CaCl2', 0.0002], ['Na2SO4', 0.0002]]);
+  assert.equal(r.events.length, 0, '0.004 mol/L 的 Ca²⁺ 和 SO4²⁻：Q = 1.6e-5 < Ksp，不沉淀');
+  r = runReal([['CaCl2', 0.005], ['Na2SO4', 0.005]]);
+  assert.equal(r.events[0].kind, 'precipitation');
+  const left = r.beaker.ions['Ca^2+'] / 0.05;
+  assert.ok(Math.abs(left * left - 4.9e-5) / 4.9e-5 < 1e-3, '沉淀到 Q = Ksp 为止');
+  // AgCl 很难溶：沉淀完全
+  r = runReal([['AgNO3', 0.001], ['NaCl', 0.001]]);
+  assert.ok(Math.abs(r.beaker.solids.AgCl - 0.001) < 1e-12);
+  assert.equal(r.beaker.ions['Ag^+'], undefined);
+});
+
+test('Ksp：Ca(OH)2 少量全溶，多了有一部分不溶，加水后又溶解', () => {
+  let r = runReal([['Ca(OH)2', 0.0003]]);
+  assert.equal(r.events.length, 0);
+  r = runReal([['Ca(OH)2', 0.002]]);
+  const solid = r.beaker.solids['Ca(OH)2'];
+  assert.ok(solid > 0.001 && solid < 0.002);
+  let b = addSubstance(r.beaker, 'H2O', 500 / 18, DATA);
+  r = react(b, { data: DATA });
+  assert.match(r.events[0].observations.join(), /溶解/);
+  assert.equal(r.beaker.solids['Ca(OH)2'], undefined);
+});
+
+test('Ksp：volumeMl 把溶液的体积算进去，稀了就不沉淀', () => {
+  let b = createBeaker('b', 'b', 0);
+  b = addSubstance(b, 'CaCl2', 0.0005, DATA, { volumeMl: 50 });
+  b = addSubstance(b, 'Na2SO4', 0.0005, DATA, { volumeMl: 50 });
+  assert.ok(Math.abs(b.liquids.H2O - 100 / 18) < 1e-9);
+  assert.equal(react(b, { data: DATA }).events.length, 0, '0.005 mol/L：Q = 2.5e-5 < Ksp');
+  b = addSubstance(createBeaker('b', 'b', 0), 'CaCl2', 0.0005, DATA, { volumeMl: 5 });
+  b = addSubstance(b, 'Na2SO4', 0.0005, DATA, { volumeMl: 5 });
+  assert.equal(react(b, { data: DATA }).events[0].kind, 'precipitation', '0.05 mol/L：Q = 2.5e-3 > Ksp');
+});
+
+test('石灰水通 CO2：少量变浑浊，过量又变澄清', () => {
+  const lime = () => addSubstance(createBeaker('b', 'b'), 'Ca(OH)2', 0.0005, DATA);
+  let r = react(addSubstance(lime(), 'CO2', 0.0003, DATA), { data: DATA });
+  assert.ok(r.beaker.solids.CaCO3 > 0, '少量 CO2：变浑浊');
+  r = react(addSubstance(lime(), 'CO2', 0.002, DATA), { data: DATA });
+  assert.equal(r.beaker.solids.CaCO3, undefined, '过量 CO2：沉淀溶解，变澄清');
+  assert.ok(r.beaker.ions['HCO3^-'] > 0);
 });
