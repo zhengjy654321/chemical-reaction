@@ -2,7 +2,8 @@
 import { DATA } from './data.js';
 import { createBeaker, addSubstance, pour, filter } from './state.js';
 import { react } from './engine/index.js';
-import { render, AMOUNTS, nameOf, reagentLabel, canBeSolid } from './render.js';
+import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js';
+import { MODES, DROP_ML, fromPos } from './amount.js';
 
 const STORE_KEY = 'chem-lab-v1';
 const root = document.getElementById('app');
@@ -13,7 +14,7 @@ function freshApp() {
     selected: 'b1',
     counter: 2,
     log: [],
-    ui: { reagent: null, form: 'aq', cat: 'all', search: '', pourTo: null },
+    ui: { reagent: null, form: 'aq', cat: 'all', search: '', pourTo: null, amt: { conc: 1 } },
   };
 }
 
@@ -59,6 +60,28 @@ function act(title, i, extra) {
   logEntry(title, events, events.length ? '' : '无明显反应现象');
 }
 
+function addReagent(isDrop) {
+  const i = idx(); const r = DATA.SUBSTANCES[app.ui.reagent];
+  if (i < 0 || !r) return;
+  const solid = app.ui.form === 's' && canBeSolid(r);
+  const st = amountState(app, r, solid);
+  const vol = isDrop ? DROP_ML : st.value;
+  const moles = isDrop
+    ? (st.mode === 'aq' ? DROP_ML / 1000 * st.conc : st.moles / st.value * DROP_ML)
+    : st.moles;
+  const opts = solid ? { form: 's' } : (st.mode === 'aq' || st.mode === 'l') ? { volumeMl: vol } : {};
+  try {
+    app.beakers[i] = addSubstance(app.beakers[i], r.id, moles, DATA, opts);
+  } catch (err) {
+    logEntry('加入失败', [], err.message); return draw();
+  }
+  const conc = st.mode === 'aq' ? ` ${st.conc} mol/L ` : ' ';
+  const what = solid ? r.name + '固体' : reagentLabel(r);
+  const verb = isDrop ? `滴加 1 滴${conc}${what}` : st.mode === 'g' ? `通入 ${st.value} mL ${what}` : `加入 ${st.value} ${st.m.unit}${conc}${what}`;
+  act(`向 ${app.beakers[i].label} ${verb}`, i);
+  draw();
+}
+
 function newId() { app.counter = (app.counter || app.beakers.length) + 1; return 'b' + app.counter; }
 
 const handlers = {
@@ -69,23 +92,28 @@ const handlers = {
   form(f) { app.ui.form = f; draw(); },
   pourTo(id) { app.ui.pourTo = id; save(); },
 
-  add(kind) {
-    const i = idx(); const r = DATA.SUBSTANCES[app.ui.reagent];
-    if (i < 0 || !r) return;
-    const [, label, moles] = AMOUNTS.find(a => a[0] === kind) || AMOUNTS[2];
-    try {
-      const solid = app.ui.form === 's' && canBeSolid(r);
-      app.beakers[i] = solid
-        ? addSubstance(app.beakers[i], r.id, moles, DATA, { form: 's' })
-        : addSubstance(app.beakers[i], r.id, moles, DATA);
-    } catch (err) {
-      logEntry('加入失败', [], err.message); return draw();
-    }
+  // 滑动条拖动时只更新读数，不整页重画（否则会打断拖动）
+  amtSlide(pos) {
+    const r = DATA.SUBSTANCES[app.ui.reagent]; if (!r) return;
     const solid = app.ui.form === 's' && canBeSolid(r);
-    const verb = kind === 'drop' && !solid ? '滴加 1 滴' : `加入${kind === 'drop' ? '一小粒' : label}`;
-    act(`向 ${app.beakers[i].label} ${verb}${solid ? r.name + '固体' : reagentLabel(r)}`, i);
+    const { mode } = amountState(app, r, solid);
+    app.ui.amt = { ...app.ui.amt, [mode]: fromPos(MODES[mode], pos) };
+    const st = amountState(app, r, solid);
+    const out = root.querySelector('#amtOut'); if (out) out.innerHTML = amountReadout(st);
+    const btn = root.querySelector('#amtBtn'); if (btn) btn.textContent = `${st.value} ${st.m.unit}`;
+    root.querySelectorAll('[data-act="amtPreset"]').forEach(el => el.classList.toggle('on', Number(el.dataset.arg) === st.value));
+    save();
+  },
+  amtPreset(v) {
+    const r = DATA.SUBSTANCES[app.ui.reagent]; if (!r) return;
+    const { mode } = amountState(app, r, app.ui.form === 's' && canBeSolid(r));
+    app.ui.amt = { ...app.ui.amt, [mode]: Number(v) };
     draw();
   },
+  conc(c) { app.ui.amt = { ...app.ui.amt, conc: Number(c) }; draw(); },
+
+  drop() { addReagent(true); },
+  addAmount() { addReagent(false); },
 
   heat() {
     const i = idx(); if (i < 0) return;

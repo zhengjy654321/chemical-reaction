@@ -1,6 +1,7 @@
 // 渲染（C 负责）。render(app, root, handlers) 只读状态，不改状态。
 import { formatFormula, formatEquation } from './equation.js';
 import { DATA } from './data.js';
+import { MODES, CONCS, DROP_ML, modeOf, molesOf, toPos, fmtAmt } from './amount.js';
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -9,13 +10,6 @@ export const CATEGORIES = [
   ['metal', '金属'], ['nonmetal', '非金属'], ['organic', '有机物'], ['gas', '气体'], ['other', '其他'],
 ];
 const FORM_LABEL = { aq: '溶液', s: '固体', l: '液体', g: '气体' };
-
-export const AMOUNTS = [
-  ['drop', '滴加 1 滴', 0.0005],
-  ['little', '少量', 0.002],
-  ['some', '适量', 0.01],
-  ['excess', '过量', 0.05],
-];
 
 // ---------- 颜色 ----------
 function hexToRgb(h) {
@@ -82,67 +76,187 @@ function volumeMl(b) {
 }
 
 // ---------- 烧杯图 ----------
+// 几何（viewBox 0 0 120 172）：杯口 y=24，杯底 y=137，内壁 x 25..95；150 mL 对应液高 92。
+const IN_L = 25, IN_R = 95, IN_BOT = 137, FULL_H = 92, FULL_ML = 150;
+const prevSolid = new Map(); // 上次渲染时各烧杯的固体总量，用来判断"刚生成沉淀"
+
+// 所有烧杯共用的渐变和裁剪，只输出一次。
+export const SVG_DEFS = `
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <clipPath id="bk-clip"><path d="M${IN_L} 27 L${IN_L} 130 Q${IN_L} ${IN_BOT} 32 ${IN_BOT} L88 ${IN_BOT} Q${IN_R} ${IN_BOT} ${IN_R} 130 L${IN_R} 27 Z"/></clipPath>
+    <linearGradient id="bk-glass" x1="0" x2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/>
+      <stop offset=".12" stop-color="#fff" stop-opacity=".05"/>
+      <stop offset=".75" stop-color="#fff" stop-opacity=".02"/>
+      <stop offset=".92" stop-color="#fff" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".04"/>
+    </linearGradient>
+    <linearGradient id="bk-depth" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".28"/>
+      <stop offset=".18" stop-color="#fff" stop-opacity=".02"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".32"/>
+    </linearGradient>
+    <linearGradient id="bk-side" x1="0" x2="1">
+      <stop offset="0" stop-color="#000" stop-opacity=".25"/>
+      <stop offset=".2" stop-color="#000" stop-opacity="0"/>
+      <stop offset=".8" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".3"/>
+    </linearGradient>
+    <linearGradient id="bk-sed" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".25"/>
+      <stop offset="1" stop-color="#000" stop-opacity=".35"/>
+    </linearGradient>
+    <radialGradient id="bk-flame-o" cx=".5" cy=".85" r=".7">
+      <stop offset="0" stop-color="#fde68a"/><stop offset=".55" stop-color="#fb923c"/><stop offset="1" stop-color="#ea580c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bk-flame-i" cx=".5" cy=".8" r=".6">
+      <stop offset="0" stop-color="#e0f2fe"/><stop offset=".6" stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>`;
+
+// 固定的伪随机，保证同一个烧杯每次画出来的颗粒位置一样。
+function rnd(seed) {
+  let x = 0;
+  for (const c of String(seed)) x = (x * 31 + c.charCodeAt(0)) >>> 0;
+  return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+}
+
 function beakerSvg(b) {
   const ml = volumeMl(b);
   const hasLiquid = ml > 0.5 || Object.keys(b.ions).length || Object.keys(b.dissolved).length;
-  const liqH = hasLiquid ? Math.min(88, Math.max(10, ml / 150 * 88)) : 0;
+  const liqH = hasLiquid ? Math.min(FULL_H, Math.max(10, ml / FULL_ML * FULL_H)) : 0;
+  const top = IN_BOT - liqH;
   const solidN = Object.values(b.solids).reduce((a, n) => a + n, 0);
-  const solH = solidN > 0 ? Math.min(30, 4 + Math.sqrt(solidN) * 60) : 0;
+  const solH = solidN > 0 ? Math.min(26, 3 + Math.sqrt(solidN) * 55) : 0;
   const color = solutionColor(b);
-  const liqFill = color || '#dbeafe';
-  const liqOpacity = color ? 0.75 : 0.55;
-  const bottom = 108;
+  const sColor = solidN > 0 ? solidColor(b) : null;
   const gases = Object.keys(b.gases).length > 0;
-  const bubbles = gases && hasLiquid ? Array.from({ length: 7 }, (_, i) => {
-    const x = 26 + (i * 37) % 50;
-    const d = (i * 0.37) % 1.6;
-    return `<circle class="bubble" cx="${x}" cy="${bottom - 4}" r="${1.5 + (i % 3)}" style="animation-delay:${d}s"/>`;
+  const R = rnd(b.id);
+
+  const prev = prevSolid.get(b.id);
+  prevSolid.set(b.id, solidN);
+  const settling = hasLiquid && solidN > 0 && prev !== undefined && solidN > prev + 1e-9;
+
+  let liquid = '';
+  if (hasLiquid) {
+    const fill = color || '#8ecbff';
+    const op = color ? 0.82 : 0.22;
+    liquid = `
+      <rect x="0" y="${top}" width="120" height="${liqH + 2}" fill="${fill}" opacity="${op}"/>
+      ${solidN > 0 ? `<rect x="0" y="${top}" width="120" height="${liqH + 2}" fill="${sColor}" opacity="${settling ? 0.35 : 0.1}" class="${settling ? 'turbid' : ''}"/>` : ''}
+      <rect x="0" y="${top}" width="120" height="${liqH + 2}" fill="url(#bk-depth)"/>
+      <rect x="0" y="${top}" width="120" height="${liqH + 2}" fill="url(#bk-side)"/>
+      <ellipse cx="60" cy="${top}" rx="35" ry="2.6" fill="${fill}" opacity="${color ? 0.95 : 0.4}"/>
+      <ellipse cx="60" cy="${top - 0.4}" rx="33" ry="1.6" fill="#fff" opacity=".35" class="surface"/>`;
+  }
+
+  let sediment = '';
+  if (solH) {
+    const y0 = IN_BOT - solH;
+    const grains = Array.from({ length: 26 }, () => {
+      const x = IN_L + 3 + R() * 64, y = IN_BOT - 1 - R() * (solH - 1);
+      return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.5 + R() * 0.9).toFixed(2)}" fill="${R() > .5 ? '#fff' : '#000'}" opacity="${(0.12 + R() * 0.15).toFixed(2)}"/>`;
+    }).join('');
+    sediment = `<g class="${settling ? 'sed-grow' : ''}">
+      <path d="M0 ${IN_BOT + 2} L0 ${y0 + solH * 0.35} Q60 ${y0 - solH * 0.45} 120 ${y0 + solH * 0.35} L120 ${IN_BOT + 2} Z" fill="${sColor}"/>
+      <path d="M0 ${IN_BOT + 2} L0 ${y0 + solH * 0.35} Q60 ${y0 - solH * 0.45} 120 ${y0 + solH * 0.35} L120 ${IN_BOT + 2} Z" fill="url(#bk-sed)" stroke="rgba(255,255,255,.35)" stroke-width=".6"/>
+      ${grains}</g>`;
+  }
+
+  // 刚生成的沉淀：絮状颗粒从液体中缓缓沉到杯底
+  const flakes = settling ? Array.from({ length: 34 }, () => {
+    const x = IN_L + 3 + R() * 64, y = top + 4 + R() * Math.max(4, liqH - solH - 8);
+    const d = Math.max(2, IN_BOT - solH * 0.5 - y);
+    return `<circle class="flake" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(0.7 + R() * 1.3).toFixed(2)}" fill="${sColor}"
+      style="--d:${d.toFixed(1)}px;animation-delay:${(R() * 0.9).toFixed(2)}s;animation-duration:${(1.8 + R() * 1.4).toFixed(2)}s"/>`;
   }).join('') : '';
-  const gasCloud = gases ? `<text x="50" y="9" text-anchor="middle" class="gas-label">${esc(Object.keys(b.gases).map(formatFormula).join(' ') + ' ↑')}</text>` : '';
+
+  const bubbles = gases && hasLiquid ? Array.from({ length: 12 }, () => {
+    const x = IN_L + 6 + R() * 58, r = 0.8 + R() * 1.8;
+    const rise = Math.max(6, IN_BOT - 4 - top);
+    return `<circle class="bubble" cx="${x.toFixed(1)}" cy="${IN_BOT - 3}" r="${r.toFixed(2)}"
+      style="--rise:-${rise.toFixed(1)}px;animation-delay:${(R() * 2).toFixed(2)}s;animation-duration:${(1.2 + R() * 1.2).toFixed(2)}s"/>`;
+  }).join('') : '';
+
+  // 无液体时（空试管里放的固体）：颗粒堆
+  const ticks = [[50, 'short'], [100, 'long'], [150, 'long']].map(([v]) => {
+    const y = IN_BOT - v / FULL_ML * FULL_H;
+    return `<line x1="${IN_L + 1}" x2="${IN_L + 9}" y1="${y}" y2="${y}" class="tick"/>
+      <text x="${IN_L + 11}" y="${y + 2.2}" class="tick-num">${v}</text>`;
+  }).join('') + [25, 75, 125].map(v => {
+    const y = IN_BOT - v / FULL_ML * FULL_H;
+    return `<line x1="${IN_L + 1}" x2="${IN_L + 5}" y1="${y}" y2="${y}" class="tick minor"/>`;
+  }).join('');
+
+  const steam = b.heated && hasLiquid ? [40, 60, 80].map((x, i) =>
+    `<path class="steam" style="animation-delay:${i * 0.7}s" d="M${x} 22 q-5 -6 0 -11 q5 -5 0 -11" />`).join('') : '';
+
   const flame = b.heated ? `
     <g class="flame">
-      <path d="M50 113 C44 120 46 126 50 128 C54 126 56 120 50 113Z" fill="#f97316"/>
-      <path d="M50 118 C47 122 48 126 50 127 C52 126 53 122 50 118Z" fill="#fde047"/>
-    </g>` : '';
-  const dots = solidN > 0 ? Array.from({ length: 10 }, (_, i) =>
-    `<circle cx="${22 + (i * 23) % 56}" cy="${bottom - 1 - ((i * 7) % Math.max(2, solH - 2))}" r="1.3" fill="rgba(0,0,0,.18)"/>`).join('') : '';
+      <path d="M60 140 C47 152 50 166 60 170 C70 166 73 152 60 140Z" fill="url(#bk-flame-o)"/>
+      <path d="M60 151 C54 158 55 166 60 169 C65 166 66 158 60 151Z" fill="url(#bk-flame-i)"/>
+    </g>
+    <ellipse cx="60" cy="139" rx="30" ry="3" fill="#fb923c" opacity=".35" class="glow"/>` : '';
+
   return `
-  <svg viewBox="0 0 100 130" class="beaker-svg" aria-hidden="true">
-    <defs><clipPath id="clip-${b.id}"><path d="M17 12 L17 103 Q17 110 24 110 L76 110 Q83 110 83 103 L83 12 Z"/></clipPath></defs>
-    <g clip-path="url(#clip-${b.id})">
-      ${hasLiquid ? `<rect x="0" y="${110 - liqH}" width="100" height="${liqH}" fill="${liqFill}" opacity="${liqOpacity}"/>` : ''}
-      ${solH ? `<rect x="0" y="${110 - solH}" width="100" height="${solH}" fill="${solidColor(b)}" stroke="rgba(0,0,0,.25)" stroke-width=".6"/>${dots}` : ''}
+  <svg viewBox="0 0 120 172" class="beaker-svg" aria-hidden="true">
+    ${steam}
+    <!-- 三脚架和石棉网 -->
+    <g class="stand">
+      <path d="M22 141 L12 172 M98 141 L108 172 M60 141 L60 150" />
+    </g>
+    ${flame}
+    <rect x="10" y="138.5" width="100" height="3" rx="1" class="gauze"/>
+    <!-- 杯体背面 -->
+    <path d="M24 24 L24 130 Q24 138 32 138 L88 138 Q96 138 96 130 L96 24 Z" fill="url(#bk-glass)"/>
+    <g clip-path="url(#bk-clip)">
+      ${liquid}
+      ${sediment}
+      ${flakes}
       ${bubbles}
     </g>
-    <path d="M12 10 L17 12 L17 103 Q17 110 24 110 L76 110 Q83 110 83 103 L83 12 L88 10" fill="none" class="glass"/>
-    ${[30, 50, 70].map(y => `<line x1="17" x2="25" y1="${y}" y2="${y}" class="tick"/>`).join('')}
-    ${gasCloud}
-    ${flame}
+    ${ticks}
+    <!-- 杯壁、杯口、高光 -->
+    <path d="M19 21 Q21 24 24 25 L24 130 Q24 138 32 138 L88 138 Q96 138 96 130 L96 25 Q99 24 101 21" class="glass"/>
+    <ellipse cx="60" cy="24" rx="37" ry="2.2" class="rim"/>
+    <path d="M29 34 L29 122" class="shine"/>
+    <path d="M90 40 L90 110" class="shine thin"/>
   </svg>`;
+}
+
+function gasTag(b) {
+  const ids = Object.keys(b.gases);
+  if (!ids.length) return '';
+  return `<div class="gas-tag">${ids.map(id => `<span>${formatFormula(id)}</span>`).join('')}<i>↑</i></div>`;
 }
 
 function contents(b) {
   const rows = [];
-  for (const [id, n] of Object.entries(b.liquids)) rows.push(id === 'H2O' ? `水 ${(n * 18).toFixed(0)} mL` : `${formatFormula(id)}(l) ${fmtMol(n)}`);
-  for (const [id, n] of Object.entries(b.ions)) rows.push(`${formatFormula(id)} ${fmtMol(n)}`);
-  for (const [id, n] of Object.entries(b.dissolved)) rows.push(`${formatFormula(id)}(aq) ${fmtMol(n)}`);
-  for (const [id, n] of Object.entries(b.solids)) rows.push(`<b>${formatFormula(id)}</b>(s) ${fmtMol(n)}`);
-  for (const [id] of Object.entries(b.gases)) rows.push(`${formatFormula(id)}(g)↑`);
-  if (!rows.length) return '<li class="muted">空</li>';
-  return rows.map(r => `<li>${r}</li>`).join('');
+  for (const [id, n] of Object.entries(b.liquids)) rows.push(id === 'H2O'
+    ? ['water', '水', `${(n * 18).toFixed(0)} mL`]
+    : ['liq', `${formatFormula(id)}<small>(l)</small>`, fmtMol(n)]);
+  for (const [id, n] of Object.entries(b.ions)) rows.push(['ion', formatFormula(id), fmtMol(n)]);
+  for (const [id, n] of Object.entries(b.dissolved)) rows.push(['aq', `${formatFormula(id)}<small>(aq)</small>`, fmtMol(n)]);
+  for (const [id, n] of Object.entries(b.solids)) rows.push(['solid', `${formatFormula(id)}<small>(s)</small>`, fmtMol(n),
+    DATA.SUBSTANCES[id]?.css || '#9ca3af']);
+  for (const [id] of Object.entries(b.gases)) rows.push(['gas', `${formatFormula(id)}<small>(g)</small>`, '↑']);
+  if (!rows.length) return '<li class="muted empty">空</li>';
+  return rows.map(([k, f, amt, css]) => `<li class="c-${k}">${css ? `<i class="dot" style="background:${css}"></i>` : ''}<span class="f">${f}</span><span class="amt">${amt}</span></li>`).join('');
 }
 
 // ---------- 各区块 ----------
 function beakersHtml(app) {
   return app.beakers.map(b => `
-    <div class="beaker ${b.id === app.selected ? 'selected' : ''}" data-act="select" data-arg="${b.id}">
+    <div class="beaker ${b.id === app.selected ? 'selected' : ''} ${b.heated ? 'is-hot' : ''}" data-act="select" data-arg="${b.id}">
       <div class="beaker-head"><strong>${esc(b.label)}</strong>${b.heated ? '<span class="tag hot">加热中</span>' : ''}</div>
-      ${beakerSvg(b)}
+      <div class="beaker-stage">${gasTag(b)}${beakerSvg(b)}</div>
       <ul class="contents">${contents(b)}</ul>
     </div>`).join('') + `
     <div class="beaker add-card">
-      <button data-act="newBeaker" data-arg="water">＋ 烧杯<br><small>50 mL 水</small></button>
-      <button data-act="newBeaker" data-arg="empty">＋ 空试管<br><small>放固体</small></button>
+      <button data-act="newBeaker" data-arg="water"><span class="plus">＋</span><span>新烧杯<small>装 50 mL 水</small></span></button>
+      <button data-act="newBeaker" data-arg="empty"><span class="plus">＋</span><span>空试管<small>用来放固体</small></span></button>
     </div>`;
 }
 
@@ -169,6 +283,15 @@ function shelfHtml(app) {
     </div>`;
 }
 
+const ICON = {
+  heat: '<svg viewBox="0 0 24 24"><path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2 1-3 2-4 0 2 1 3 2 3 0-3-1-6 1-9z"/></svg>',
+  ignite: '<svg viewBox="0 0 24 24"><path d="M5 19 15 9M15 9l2-4 2 2-4 2M7 21l-4-4"/></svg>',
+  filter: '<svg viewBox="0 0 24 24"><path d="M3 4h18l-7 9v6l-4 2v-8z"/></svg>',
+  clear: '<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>',
+  remove: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  pour: '<svg viewBox="0 0 24 24"><path d="M4 6h10l-1 12H5zM14 9c3 0 5 2 6 6"/></svg>',
+};
+
 function actionsHtml(app) {
   const b = app.beakers.find(x => x.id === app.selected);
   if (!b) return '<div class="muted">先点选或新建一个烧杯</div>';
@@ -176,22 +299,25 @@ function actionsHtml(app) {
   const others = app.beakers.filter(x => x.id !== b.id);
   const solidMode = !!r && canBeSolid(r) && app.ui.form === 's';
   return `
-    <div class="target">当前：<b>${esc(b.label)}</b>${r ? `　试剂：<b>${esc(reagentLabel(r))}</b> ${formatFormula(r.formula)}` : '　<span class="muted">（在下方选择试剂）</span>'}</div>
-    ${r && canBeSolid(r) ? `<div class="row form-row"><span>形态</span>
-      <button class="chip ${app.ui.form !== 's' ? 'on' : ''}" data-act="form" data-arg="aq">溶液</button>
-      <button class="chip ${app.ui.form === 's' ? 'on' : ''}" data-act="form" data-arg="s">固体</button></div>` : ''}
-    <div class="row">
-      ${AMOUNTS.map(([k, t]) => `<button class="${k === 'drop' ? 'primary' : ''}" data-act="add" data-arg="${k}" ${r ? '' : 'disabled'}>${k === 'drop' && solidMode ? '一小粒' : t}</button>`).join('')}
+    <div class="target">
+      <div class="t-beaker"><span class="k">当前容器</span><b>${esc(b.label)}</b></div>
+      <div class="t-reagent">${r
+        ? `<span class="k">试剂</span><span class="swatch" style="background:${r.css || 'transparent'}"></span><b>${esc(reagentLabel(r))}</b><span class="formula">${formatFormula(r.formula)}</span>`
+        : '<span class="k">试剂</span><span class="muted">在下方试剂架中选择</span>'}</div>
     </div>
-    <div class="row">
-      <button data-act="heat" class="${b.heated ? 'hot' : ''}">${b.heated ? '停止加热' : '加热'}</button>
-      <button data-act="ignite">点燃</button>
-      <button data-act="filter">过滤</button>
-      <button data-act="clear">清空</button>
-      <button data-act="remove" class="danger">移除</button>
+    ${r && canBeSolid(r) ? `<div class="seg form-row">
+      <button class="${app.ui.form !== 's' ? 'on' : ''}" data-act="form" data-arg="aq">溶液</button>
+      <button class="${app.ui.form === 's' ? 'on' : ''}" data-act="form" data-arg="s">固体</button></div>` : ''}
+    ${r ? amountHtml(app, r, solidMode) : '<div class="amount-ph muted">选好试剂后，用滑动条精确设置加入量</div>'}
+    <div class="tools">
+      <button data-act="heat" class="${b.heated ? 'hot' : ''}">${ICON.heat}<span>${b.heated ? '停止加热' : '加热'}</span></button>
+      <button data-act="ignite">${ICON.ignite}<span>点燃</span></button>
+      <button data-act="filter">${ICON.filter}<span>过滤</span></button>
+      <button data-act="clear">${ICON.clear}<span>清空</span></button>
+      <button data-act="remove" class="danger">${ICON.remove}<span>移除</span></button>
     </div>
-    <div class="row">
-      <span>倒入</span>
+    <div class="pour-row">
+      <span class="k">${ICON.pour}倒入</span>
       <select id="pourTo" ${others.length ? '' : 'disabled'}>
         ${others.map(o => `<option value="${o.id}" ${o.id === app.ui.pourTo ? 'selected' : ''}>${esc(o.label)}</option>`).join('') || '<option>（没有其他烧杯）</option>'}
       </select>
@@ -200,34 +326,86 @@ function actionsHtml(app) {
     </div>`;
 }
 
+// 加入量：滑动条 + 常用值 + 浓度
+export function amountState(app, r, solidMode) {
+  const mode = modeOf(r, solidMode);
+  const m = MODES[mode];
+  const amt = app.ui.amt || {};
+  const value = Math.min(m.max, Math.max(m.min, Number(amt[mode]) || m.def));
+  const conc = CONCS.includes(Number(amt.conc)) ? Number(amt.conc) : 1;
+  return { mode, m, value, conc, moles: molesOf(r, mode, value, conc) };
+}
+export function amountReadout(st) {
+  const extra = st.mode === 'aq' ? ` × ${st.conc} mol/L` : '';
+  return `<b>${st.value}</b> ${st.m.unit}<span class="x">${extra}</span><span class="eqv">≈ ${fmtAmt(st.moles)}</span>`;
+}
+function amountHtml(app, r, solidMode) {
+  const st = amountState(app, r, solidMode);
+  const { mode, m } = st;
+  return `
+    <div class="amount" data-mode="${mode}">
+      <div class="amount-top"><span class="k">${m.label}</span><span class="readout" id="amtOut">${amountReadout(st)}</span></div>
+      <input id="amt" type="range" min="0" max="1000" step="1" value="${toPos(m, st.value)}" aria-label="${m.label}">
+      <div class="presets">${m.presets.map(v => `<button class="chip ${v === st.value ? 'on' : ''}" data-act="amtPreset" data-arg="${v}">${v} ${m.unit}</button>`).join('')}</div>
+      ${mode === 'aq' ? `<div class="conc"><span class="k">浓度</span><div class="seg">${CONCS.map(c => `<button class="${c === st.conc ? 'on' : ''}" data-act="conc" data-arg="${c}">${c}</button>`).join('')}</div><span class="k">mol/L</span></div>` : ''}
+      <div class="amount-go">
+        ${mode === 'aq' || mode === 'l' ? `<button data-act="drop">滴加 1 滴<small>${DROP_ML} mL</small></button>` : ''}
+        <button class="primary" data-act="addAmount">加入<small id="amtBtn">${st.value} ${m.unit}</small></button>
+      </div>
+    </div>`;
+}
+
+// 方程式排版：反应条件写在等号上方（教材写法）
+function termHtml(t) {
+  const n = t.n === 1 ? '' : `<span class="coef">${t.n}</span>`;
+  const note = t.note ? `<small>(${esc(t.note)})</small>` : '';
+  const mark = t.mark ? `<span class="mark">${esc(t.mark)}</span>` : '';
+  return `<span class="term">${n}${esc(formatFormula(t.formula))}${note}${mark}</span>`;
+}
+function equationHtml(eq) {
+  if (!eq?.reactants || !eq?.products) return esc(formatEquation(eq));
+  const side = ts => ts.map(termHtml).join('<span class="plus">+</span>');
+  const cond = eq.condition ? (/^[A-Z]/.test(eq.condition) ? formatFormula(eq.condition) : eq.condition) : '';
+  const arrow = `<span class="eqsign${cond ? ' has-cond' : ''}">${cond ? `<span class="cond">${esc(cond)}</span>` : ''}<span class="bar"></span></span>`;
+  return side(eq.reactants) + arrow + side(eq.products);
+}
+
 function logHtml(app) {
-  if (!app.log.length) return '<div class="muted">还没有操作。选一个试剂，点“滴加”或“适量”加入烧杯。</div>';
-  return app.log.slice().reverse().map(entry => `
-    <div class="entry">
+  if (!app.log.length) return `<div class="empty-log">
+    <div class="el-icon">⚗</div>
+    <div>还没有操作</div>
+    <div class="muted">选一个试剂，点"滴加 1 滴"或"适量"加入烧杯，方程式和现象会显示在这里。</div></div>`;
+  return app.log.slice().reverse().map(entry => {
+    const evs = entry.events || [];
+    const hasEq = evs.some(e => e.equation || e.ionic);
+    return `
+    <div class="entry ${hasEq ? 'has-eq' : 'plain'}">
       <div class="op">${esc(entry.title)}</div>
-      ${(entry.events || []).map(e => `
+      ${evs.map(e => `
         <div class="ev">
-          ${e.equation ? `<div class="eq">${esc(formatEquation(e.equation))}</div>` : ''}
-          ${e.ionic ? `<div class="eq ionic"><span class="lbl">离子</span>${esc(formatEquation(e.ionic))}</div>` : ''}
-          ${e.observations?.length ? `<div class="obs">现象：${esc(e.observations.join('；'))}</div>` : ''}
+          ${e.equation ? `<div class="eq">${equationHtml(e.equation)}</div>` : ''}
+          ${e.ionic ? `<div class="eq ionic"><span class="lbl">离子方程式</span>${equationHtml(e.ionic)}</div>` : ''}
+          ${e.observations?.length ? `<div class="obs"><span class="lbl obs-l">现象</span>${esc(e.observations.join('；'))}</div>` : ''}
         </div>`).join('')}
-      ${entry.note ? `<div class="obs">${esc(entry.note)}</div>` : ''}
-    </div>`).join('');
+      ${entry.note ? `<div class="note">${esc(entry.note)}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 export function render(app, root, handlers) {
   const keepScroll = root.querySelector('.shelf-list')?.scrollTop || 0;
-  root.innerHTML = `
+  root.innerHTML = `${SVG_DEFS}
     <section class="bench">
+      <div class="sec-head"><h2>实验台</h2><span class="muted">点选烧杯后再加试剂</span></div>
       <div class="beakers">${beakersHtml(app)}</div>
     </section>
     <section class="panel">
-      <div class="actions">${actionsHtml(app)}</div>
-      <div class="shelf">${shelfHtml(app)}</div>
+      <div class="card actions">${actionsHtml(app)}</div>
+      <div class="card shelf"><div class="sec-head"><h2>试剂架</h2></div>${shelfHtml(app)}</div>
     </section>
-    <section class="log">
+    <section class="card log">
       <div class="log-head"><h2>方程式与现象</h2><button data-act="clearLog" class="small">清空记录</button><button data-act="reset" class="small danger">重置实验台</button></div>
-      ${logHtml(app)}
+      <div class="entries">${logHtml(app)}</div>
     </section>`;
   const list = root.querySelector('.shelf-list');
   if (list) list.scrollTop = keepScroll;
@@ -240,6 +418,8 @@ export function render(app, root, handlers) {
   };
   const pourTo = root.querySelector('#pourTo');
   if (pourTo) pourTo.onchange = () => handlers.pourTo(pourTo.value);
+  const amt = root.querySelector('#amt');
+  if (amt) amt.oninput = () => handlers.amtSlide(Number(amt.value));
   const search = root.querySelector('#search');
   if (search) search.oninput = () => {
     const q = search.value.trim().toLowerCase();
