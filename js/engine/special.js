@@ -92,10 +92,10 @@ export function specialRule(beaker, ctx) {
         kind: 'special',
         equation,
         ionic: hasIons ? { reactants: toTerms(r.match, data), products: toTerms(r.produce, data, r.match, beaker), condition: cond } : null,
-        observations: r.observations || [],
+        observations: (ctx.quiet && r.quiet) || r.observations || [],
         extent,
         reactionId: r.id,
-        intensity: r.intensity || 0,
+        intensity: ctx.quiet && r.quiet ? 0 : r.intensity || 0,
       },
     };
   }

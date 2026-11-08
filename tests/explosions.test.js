@@ -23,3 +23,28 @@ test('氢气和氯气：不光照不点燃就不反应', () => {
   const { events } = react(loadExplosion(p, 'x', 't', DATA), { data: DATA, heated: true });
   assert.equal(events.length, 0);
 });
+
+import { nozzleIgnite } from '../js/explosions.js';
+import { createBeaker, addSubstance } from '../js/state.js';
+
+test('导管口点燃：混有氧气就爆炸，没有可燃气体就不反应', () => {
+  let b = createBeaker('x', 't', 0);
+  b = { ...b, gases: { CO: 0.004, O2: 0.002 } };
+  const r = nozzleIgnite(b);
+  assert.ok(r.mixed);
+  assert.equal(maxIntensity(react(r.beaker, { data: DATA, ...r.ctx }).events), 3);
+  assert.equal(nozzleIgnite(createBeaker('y', 't')).fuels.length, 0);
+});
+
+test('导管口点燃：锌和稀硫酸刚生成的氢气也能安静燃烧', () => {
+  let b = addSubstance(createBeaker('x', 't'), 'H2SO4', 0.01, DATA);
+  b = addSubstance(b, 'Zn', 0.005, DATA, { form: 's' });
+  b = react(b, { data: DATA }).beaker;
+  assert.ok(b.gases.H2 > 0);
+  const r = nozzleIgnite(b);
+  const { events } = react(r.beaker, { data: DATA, ...r.ctx });
+  const ev = events.find(e => e.reactionId === 'h2-o2');
+  assert.ok(ev, JSON.stringify(events.map(e => e.reactionId)));
+  assert.equal(ev.intensity, 0);
+  assert.match(ev.observations[0], /安静燃烧/);
+});

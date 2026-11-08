@@ -1,10 +1,10 @@
 // 应用入口（C 负责）。持有状态，调用 state.js 和引擎，把结果交给 render。
-import { DATA } from './data.js?v=3';
-import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js?v=3';
-import { react } from './engine/index.js?v=3';
-import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js?v=3';
-import { EXPLOSIONS, loadExplosion, triggerExplosion, maxIntensity, triggerLabel } from './explosions.js?v=3';
-import { play as playFx, setMuted } from './fx.js?v=3';
+import { DATA } from './data.js?v=4';
+import { createBeaker, addSubstance, pour, filter, collectGas } from './state.js?v=4';
+import { react } from './engine/index.js?v=4';
+import { render, nameOf, reagentLabel, canBeSolid, amountState, amountReadout } from './render.js?v=4';
+import { EXPLOSIONS, loadExplosion, triggerExplosion, maxIntensity, triggerLabel, nozzleIgnite } from './explosions.js?v=4';
+import { play as playFx, calm as calmFx, setMuted } from './fx.js?v=4';
 import { MODES, DROP_ML, fromPos } from './amount.js';
 
 const STORE_KEY = 'chem-lab-v1';
@@ -155,6 +155,23 @@ const handlers = {
     draw();
   },
 
+  // 导管口点燃：纯净的可燃气体在空气中安静燃烧；混有氧气则爆炸
+  nozzle() {
+    const i = idx(); if (i < 0 || broken(i)) return;
+    const b = app.beakers[i];
+    const r = nozzleIgnite(b);
+    if (!r.fuels.length) {
+      logEntry(`在导管口点燃 ${b.label} 的气体`, [], '容器里没有可燃气体（氢气、一氧化碳、甲烷），点不着');
+      return draw();
+    }
+    const names = r.fuels.map(nameOf).join('、');
+    app.beakers[i] = r.beaker;
+    act(r.mixed ? `在导管口点燃 ${b.label} 的${names}（混有氧气，气体不纯！）` : `在导管口点燃 ${b.label} 导出的纯净${names}`, i, r.ctx);
+    if (!r.mixed) pendingFx = { id: b.id, calm: true, reactionId: r.fuels.includes('CO') ? 'co-o2' : 'h2-o2' };
+    if (app.ui.armed?.id === b.id) app.ui.armed = null;
+    draw();
+  },
+
   light() {
     const i = idx(); if (i < 0 || broken(i)) return;
     act(`用强光照射 ${app.beakers[i].label}`, i, { light: true });
@@ -188,8 +205,9 @@ const handlers = {
     app.beakers[i] = beaker;
     const t = p.trigger;
     const title = t.type === 'add' ? `向 ${beaker.label} 中投入一小块${nameOf(t.id)}`
-      : t.type === 'light' ? `用强光照射 ${beaker.label}` : `${triggerLabel(t)} ${beaker.label} 中的物质`;
+      : t.type === 'light' ? `用强光照射 ${beaker.label}` : t.type === 'nozzle' ? `在导管口点燃 ${beaker.label} 导出的纯净气体` : `${triggerLabel(t)} ${beaker.label} 中的物质`;
     act(title, i, ctx);
+    if (ctx.quiet) pendingFx = { id, calm: true, reactionId: p.reaction };
     app.ui.armed = null;
     draw();
   },
@@ -276,7 +294,7 @@ function draw() {
   if (pendingFx) {
     const fx = pendingFx; pendingFx = null;
     const el = root.querySelector(`.beaker[data-arg="${fx.id}"] .beaker-stage`);
-    try { playFx(fx.level, el, fx.reactionId); } catch (err) { console.error(err); }
+    try { if (fx.calm) calmFx(el, fx.reactionId); else playFx(fx.level, el, fx.reactionId); } catch (err) { console.error(err); }
   }
 }
 draw();

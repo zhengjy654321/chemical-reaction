@@ -183,6 +183,26 @@ function shake(el, cls, ms) {
   setTimeout(() => el.classList.remove(cls), ms);
 }
 
+// 安静燃烧：容器口上方一小簇持续一会儿的火焰，没有声音
+export function calm(el, reactionId) {
+  if (!el || !document.body.animate) return;
+  const rect = el.getBoundingClientRect();
+  const x = rect.left + rect.width / 2, y = rect.top + rect.height * 0.12;
+  const color = reactionId === 'co-o2' ? '#3b82f6' : '#7dd3fc';
+  const layer = document.createElement('div');
+  layer.className = 'fx-layer';
+  document.body.appendChild(layer);
+  setTimeout(() => layer.remove(), 3600);
+  for (let i = 0; i < 26; i++) {
+    const s = dot(layer, x + rand(-6, 6) - 9, y, 'fx-flame', { background: `radial-gradient(circle at 50% 70%, #e0f2fe, ${color} 45%, transparent 70%)` });
+    s.animate([
+      { transform: 'translateY(0) scale(.5)', opacity: 0 },
+      { transform: `translateY(-${rand(10, 18)}px) scale(1)`, opacity: 0.9, offset: 0.3 },
+      { transform: `translateY(-${rand(30, 45)}px) scale(.3)`, opacity: 0 },
+    ], { duration: rand(500, 800), delay: i * 110, easing: 'ease-out', fill: 'forwards' });
+  }
+}
+
 // el：烧杯图所在的元素
 export function play(level, el, reactionId) {
   if (!level) return;
