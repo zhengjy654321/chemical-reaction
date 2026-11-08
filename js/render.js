@@ -263,7 +263,7 @@ function beakersHtml(app) {
 function shelfHtml(app) {
   const ui = app.ui;
   const all = Object.values(DATA.SUBSTANCES).filter(s => s.shelf);
-  const inCat = (s, k) => k === 'all' || s.category === k || (k === 'gas' && s.shelfForm === 'g');
+  const inCat = (s, k) => k === 'all' || s.category === k || (k === 'gas' && (s.shelfForm === 'g' || s.state === 'g'));
   const cats = CATEGORIES.filter(([k]) => all.some(s => inCat(s, k)));
   const q = (ui.search || '').trim().toLowerCase();
   const list = all.filter(s => inCat(s, ui.cat));
