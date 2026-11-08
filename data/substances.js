@@ -56,8 +56,9 @@ const ppt = (id, name, category, [color, css], o = {}) =>
 // 固体试剂
 const solid = (id, name, category, [color, css], o = {}) =>
   s(id, { name, category, state: 's', color, css, shelfForm: 's', ...o });
+// 气体默认放上试剂架（形态"气体"，通入选中的烧杯）；不适合单独取用的写 shelf: false。
 const gas = (id, name, category, color, css, o = {}) =>
-  s(id, { name, category, state: 'g', color, css, shelf: false, ...o });
+  s(id, { name, category, state: 'g', color, css, shelf: true, shelfForm: 'g', ...o });
 
 export const SUBSTANCES = {
   // ---------- 水 ----------
@@ -233,7 +234,7 @@ export const SUBSTANCES = {
 
   // ---------- 其他 ----------
   H2O2: s('H2O2', { name: '过氧化氢溶液', category: 'other', state: 'l', color: '无色', css: null, soluble: true, shelfForm: 'aq', note: '双氧水' }),
-  H2O_g: gas('H2O_g', '水蒸气', 'oxide', '无色', null, { formula: 'H2O', note: '受热产生的水蒸气，会逸出' }),
+  H2O_g: gas('H2O_g', '水蒸气', 'oxide', '无色', null, { formula: 'H2O', note: '受热产生的水蒸气，会逸出', shelf: false }),
   HCl_g: gas('HCl_g', '氯化氢气体', 'acid', '无色', null, { formula: 'HCl', note: '极易溶于水，遇水蒸气形成白雾' }),
   NH3:  gas('NH3', '氨气', 'other', '无色', null, { soluble: true, note: '刺激性气味，极易溶于水' }),
   CH4:  gas('CH4', '甲烷', 'organic', '无色', null),

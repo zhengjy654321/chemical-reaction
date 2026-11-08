@@ -214,3 +214,63 @@ test('真实数据：常见实验每个事件都守恒，并且有分子或离�
     }
   }
 });
+
+// ---------- 沉淀转化、气体试剂（真实数据） ----------
+function realSeq(steps, water = 50) {
+  let b = createBeaker('b', 'b', water);
+  const all = [];
+  for (const [items, ctx = {}] of steps) {
+    for (const [id, n, opt] of items) b = addSubstance(b, id, n, DATA, opt);
+    const r = react(b, { data: DATA, ...ctx });
+    b = r.beaker; all.push(...r.events);
+  }
+  return { beaker: b, events: all };
+}
+const eqs = events => events.map(e => e.equation && formatEquation(e.equation));
+
+test('沉淀转化：微溶/难溶物遇到能生成更难溶物的离子就转化', () => {
+  const cases = [
+    [[['CaSO4', 0.002, { form: 's' }]], [['Na2CO3', 0.002]], 'CaSO₄ + Na₂CO₃ = CaCO₃ + Na₂SO₄', 'CaCO3'],
+    [[['AgNO3', 0.002], ['NaCl', 0.002]], [['KI', 0.002]], /^AgCl \+ (KI|NaI) = AgI \+ (KCl|NaCl)$/, 'AgI'],
+    [[['AgNO3', 0.002], ['NaCl', 0.002]], [['NaBr', 0.002]], /^AgCl \+ NaBr = AgBr \+ NaCl$/, 'AgBr'],
+    [[['ZnSO4', 0.002], ['Na2S', 0.002]], [['CuSO4', 0.002]], 'ZnS + CuSO₄ = CuS + ZnSO₄', 'CuS'],
+    [[['MgCl2', 0.003], ['NaOH', 0.006]], [['FeCl3', 0.002]], '3Mg(OH)₂ + 2FeCl₃ = 2Fe(OH)₃ + 3MgCl₂', 'Fe(OH)3'],
+  ];
+  for (const [first, second, expected, product] of cases) {
+    if (!has([...first, ...second])) continue;
+    const r = realSeq([[first], [second]]);
+    const ok = eqs(r.events).some(x => (expected instanceof RegExp ? expected.test(x || '') : x === expected));
+    assert.ok(ok, `${expected}：实际 ${eqs(r.events).join(' / ')}`);
+    assert.ok(r.beaker.solids[product] > 0);
+    for (const e of r.events) for (const x of [e.equation, e.ionic]) if (x) assert.ok(checkConservation(x).ok, formatEquation(x));
+  }
+});
+
+test('沉淀转化：不会反过来（AgI 遇 Cl⁻、CaCO3 遇 SO4²⁻ 不转化）', () => {
+  let r = realSeq([[[['AgNO3', 0.002], ['KI', 0.002]]], [[['NaCl', 0.004]]]]);
+  assert.equal(r.events.length, 1);
+  r = realSeq([[[['CaCO3', 0.002, { form: 's' }], ['Na2SO4', 0.002]]]]);
+  assert.equal(r.events.length, 0);
+});
+
+test('几种沉淀能同时生成时，最难溶的先出（Cl⁻、I⁻ 混合液滴入 AgNO3 先出黄色 AgI）', () => {
+  const r = runReal([['NaCl', 0.002], ['KI', 0.002], ['AgNO3', 0.002]]);
+  assert.equal(r.events[0].ionic && formatEquation(r.events[0].ionic), 'Ag⁺ + I⁻ = AgI↓');
+});
+
+test('气体都在试剂架上，可以通入烧杯', () => {
+  for (const id of ['NO', 'NO2', 'CO', 'CO2', 'H2', 'O2', 'SO2', 'NH3', 'HCl_g', 'H2S']) {
+    const s = DATA.SUBSTANCES[id];
+    assert.ok(s && s.shelf && s.shelfForm === 'g', `${id} 应在试剂架上，形态为气体`);
+  }
+});
+
+test('气体反应：2NO + O2、3NO2 + H2O、CO 还原 CuO、HCl 溶于水、H2S 与 CuSO4', () => {
+  const one = (steps, water) => eqs(realSeq(steps, water).events);
+  assert.ok(one([[[['NO', 0.002], ['O2', 0.001]]]], 0).includes('2NO + O₂ = 2NO₂'));
+  assert.ok(one([[[['NO2', 0.003]]]]).includes('3NO₂ + H₂O = 2HNO₃ + NO'));
+  assert.ok(one([[[['CuO', 0.002, { form: 's' }], ['CO', 0.002]], { heated: true }]], 0).includes('CuO + CO =加热= Cu + CO₂'));
+  const hcl = realSeq([[[['HCl_g', 0.002]]]]);
+  assert.ok(Math.abs(hcl.beaker.ions['H^+'] - 0.002) < 1e-9, 'HCl 气体溶于水成为盐酸');
+  assert.ok(one([[[['H2S', 0.002], ['CuSO4', 0.002]]]]).includes('H₂S + CuSO₄ = CuS↓ + H₂SO₄'));
+});
