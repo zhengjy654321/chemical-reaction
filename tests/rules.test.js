@@ -322,3 +322,31 @@ test('石灰水通 CO2：少量变浑浊，过量又变澄清', () => {
   assert.equal(r.beaker.solids.CaCO3, undefined, '过量 CO2：沉淀溶解，变澄清');
   assert.ok(r.beaker.ions['HCO3^-'] > 0);
 });
+
+test('气体之间的反应：两种气体先后通入同一个容器（两种顺序、有水没水）', () => {
+  const pairs = [
+    [['NO', 'O2'], {}, '2NO + O₂ = 2NO₂'],
+    [['H2S', 'SO2'], {}, 'SO₂ + 2H₂S = 3S↓ + 2H₂O'],
+    [['H2', 'Cl2'], { ignite: true }, 'H₂ + Cl₂ =点燃= 2HCl'],
+  ];
+  for (const [ids, ctx, expected] of pairs) {
+    for (const order of [ids, [...ids].reverse()]) {
+      for (const water of [0, 50]) {
+        let b = createBeaker('b', 'b', water);
+        const seen = [];
+        for (const id of order) {
+          b = addSubstance(b, id, 0.002, DATA);
+          const r = react(b, { data: DATA });
+          b = r.beaker; seen.push(...eqs(r.events));
+        }
+        if (ctx.ignite) { const r = react(b, { data: DATA, ...ctx }); seen.push(...eqs(r.events)); }
+        assert.ok(seen.includes(expected), `${order.join(' 后 ')}（水 ${water} mL）：${seen.join(' / ')}`);
+      }
+    }
+  }
+  // NH3 + HCl：没水时生成白烟 NH4Cl
+  let b = createBeaker('b', 'b', 0);
+  b = react(addSubstance(b, 'NH3', 0.002, DATA), { data: DATA }).beaker;
+  const r = react(addSubstance(b, 'HCl_g', 0.002, DATA), { data: DATA });
+  assert.ok(eqs(r.events).includes('NH₃ + HCl = NH₄Cl'));
+});
