@@ -1,5 +1,6 @@
 // 沉淀规则（B 负责）：溶液中阴阳离子组合在 INSOLUBLE 表里就生成沉淀。
 // 写出完整分子方程式（如 BaCl2 + H2SO4 = BaSO4↓ + 2HCl）和离子方程式。
+import { hasWater } from '../state.js';
 import { describe, ionPairReaction, molTerm, runReaction, aqTerm, ionTerm, productTerms, counterIon, charge, sinkOf, cations, anions, waterL, isHeated, WEAK_ANIONS } from './common.js';
 
 // 微溶物在水中最多溶解的量（mol/L），超过才析出。粗略取 Ca(OH)2、CaSO4、Ag2SO4 的量级。
@@ -24,7 +25,11 @@ export function precipitationRule(beaker, ctx) {
   for (const row of rows) {
     const prod = data.SUBSTANCES[row.product];
     let cap;
-    if (row.slight) {
+    if (row.ksp) {
+      // 用溶度积：离子积 Q > Ksp 才沉淀，沉淀到 Q = Ksp 为止。
+      if (!hasWater(beaker)) continue;
+      cap = (extent, ionic) => kspExtent(beaker, ionic, row, data, extent);
+    } else if (row.slight) {
       const limit = SLIGHT_LIMIT * waterL(beaker);
       cap = (extent, ionic) => {
         const k = ionic.products.find(t => t.id === row.product)?.n || 1;
@@ -41,28 +46,75 @@ export function precipitationRule(beaker, ctx) {
     const msg = row.slight && !r.event.equation ? `${prod.name}微溶，部分未溶解` : `产生${prod.color}沉淀`;
     return describe(beaker, r, data, [msg]);
   }
-  return hydrogenSulfide(beaker, ctx) || conversionRule(beaker, ctx);
+  return hydrogenSulfide(beaker, ctx) || conversionRule(beaker, ctx) || dissolveRule(beaker, ctx);
+}
+
+// ---------- 溶度积计算 ----------
+// 离子积 Q = c(阳)^m · c(阴)^n（c 单位 mol/L，体积取烧杯里水的体积）。
+export function ionProduct(beaker, row, data, dc = 0, da = 0) {
+  const V = waterL(beaker);
+  const { m, n } = stoich(row, data);
+  const c = ((beaker.ions[row.cation] || 0) + dc) / V, a = ((beaker.ions[row.anion] || 0) + da) / V;
+  return c ** m * a ** n;
+}
+function stoich(row, data) {
+  const qc = charge(row.cation, data), qa = -charge(row.anion, data);
+  const g = gcdInt(qc, qa);
+  return { m: qa / g, n: qc / g };
+}
+const COMPLETE = 1e-5; // 课本："离子浓度小于 1e-5 mol/L 视为沉淀完全"
+
+// 简单沉淀（离子方程式只有这一对离子）时，二分求沉淀到 Q = Ksp 的反应进度；
+// 带配对离子一起反应的复杂情况（如 Ba(OH)2 + CuSO4）按完全沉淀算。
+function kspExtent(beaker, ionic, row, data, max) {
+  const tc = ionic.reactants.find(t => t.formula === row.cation);
+  const ta = ionic.reactants.find(t => t.formula === row.anion);
+  if (!tc || !ta || ionic.reactants.length !== 2) return max;
+  if (ionProduct(beaker, row, data) <= row.ksp) return 0;
+  const V = waterL(beaker);
+  const left = x => Math.min((beaker.ions[row.cation] - tc.n * x) / V, (beaker.ions[row.anion] - ta.n * x) / V);
+  let lo = 0, hi = max;
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    if (ionProduct(beaker, row, data, -tc.n * mid, -ta.n * mid) > row.ksp) lo = mid; else hi = mid;
+  }
+  // 剩下的离子浓度 < 1e-5 mol/L，或不到原来的 0.1%，算沉淀完全（课本对难溶物的处理）
+  const frac = Math.min((beaker.ions[row.cation] - tc.n * lo) / beaker.ions[row.cation], (beaker.ions[row.anion] - ta.n * lo) / beaker.ions[row.anion]);
+  return left(lo) < COMPLETE || frac < 1e-3 ? max : lo;
+}
+
+// 固体沉淀在水里还没达到饱和（Q < Ksp，例如加了水）时溶解一部分或全部。
+function dissolveRule(beaker, ctx) {
+  const { data } = ctx;
+  if (!hasWater(beaker)) return null;
+  for (const [id, amt] of Object.entries(beaker.solids)) {
+    const row = data.INSOLUBLE.find(r => r.product === id && r.ksp);
+    if (!row) continue;
+    const { m, n } = stoich(row, data);
+    if (ionProduct(beaker, row, data) >= row.ksp) continue;
+    let lo = 0, hi = amt;
+    if (ionProduct(beaker, row, data, m * amt, n * amt) <= row.ksp) lo = amt;
+    else for (let i = 0; i < 200; i++) {
+      const mid = (lo + hi) / 2;
+      if (ionProduct(beaker, row, data, m * mid, n * mid) < row.ksp) lo = mid; else hi = mid;
+    }
+    if (lo < Math.max(1e-5, amt * 0.05)) continue;
+    const r = runReaction(beaker, data, [{ ...molTerm(id, data), solid: true }], [ionTerm(row.cation), ionTerm(row.anion)],
+      { kind: 'precipitation', cap: () => lo });
+    if (r) return describe(beaker, r, data, [lo >= amt - 1e-12 ? `${data.SUBSTANCES[id].name}全部溶解` : `${data.SUBSTANCES[id].name}部分溶解`]);
+  }
+  return null;
 }
 
 // ---------- 沉淀转化 ----------
 // 难溶/微溶固体遇到能和它的离子生成"更难溶"物质的离子时，转化成更难溶的沉淀：
 // CaSO4 + Na2CO3 = CaCO3 + Na2SO4，AgCl + KI = AgI + KCl，ZnS + CuSO4 = CuS + ZnSO4，
-// 3Mg(OH)2 + 2FeCl3 = 2Fe(OH)3 + 3MgCl2。用溶度积算出的溶解度比较，新沉淀至少难溶 3 倍才转化。
-export const KSP = {
-  CaSO4: 4.9e-5, 'Ca(OH)2': 5.5e-6, CaCO3: 3.4e-9, CaSO3: 3.1e-7, 'Ca3(PO4)2': 2.0e-29,
-  BaSO4: 1.1e-10, BaCO3: 2.6e-9, BaSO3: 5.0e-10, 'Ba3(PO4)2': 3.4e-23,
-  'Mg(OH)2': 5.6e-12, MgCO3: 6.8e-6,
-  'Al(OH)3': 1.3e-33, 'Zn(OH)2': 3.0e-17, ZnCO3: 1.5e-10, ZnS: 2.5e-22,
-  'Fe(OH)2': 4.9e-17, FeCO3: 3.1e-11, FeS: 6.3e-18, 'Fe(OH)3': 2.8e-39,
-  'Cu(OH)2': 2.2e-20, CuS: 6.3e-36,
-  AgCl: 1.8e-10, AgBr: 5.4e-13, AgI: 8.5e-17, Ag2CO3: 8.5e-12, Ag3PO4: 8.9e-17, Ag2S: 6.3e-50, Ag2SO4: 1.2e-5,
-  PbSO4: 2.5e-8, PbI2: 9.8e-9, PbS: 8.0e-28, PbCO3: 7.4e-14, PbCl2: 1.7e-5,
-};
+// 3Mg(OH)2 + 2FeCl3 = 2Fe(OH)3 + 3MgCl2。用 INSOLUBLE 表里的溶度积 ksp 算出的溶解度比较，新沉淀至少难溶 3 倍才转化。
 const CONVERT_RATIO = 3;
 
 // 摩尔溶解度 s：Ksp = (m·s)^m (n·s)^n。
 function molarSolubility(row, data) {
-  const ksp = KSP[row.product];
+  const ksp = row.ksp;
   if (!ksp) return null;
   const qc = charge(row.cation, data), qa = -charge(row.anion, data);
   const g = gcdInt(qc, qa), m = qa / g, n = qc / g;

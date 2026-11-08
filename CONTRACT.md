@@ -71,6 +71,13 @@ export const INSOLUBLE = [
 ```
 计量比由电荷推出（Ba²⁺:SO₄²⁻ = 1:1，Ag⁺:SO₄²⁻ = 2:1），`product` 必须是 `SUBSTANCES` 里的物质。会水解或分解的组合（如 Ag⁺+OH⁻→Ag₂O，Al³⁺+CO₃²⁻ 双水解）不放这里，写进特殊反应表。
 
+每行可带 `ksp`（25℃ 溶度积）。引擎用它做真实的沉淀计算：
+- 离子浓度 = 物质的量 / 烧杯里水的体积（L）；离子积 Q = c(阳离子)^m · c(阴离子)^n。
+- Q > Ksp 才沉淀，沉淀到 Q = Ksp 为止；剩下的离子浓度小于 1e-5 mol/L（或不到原来的 0.1%）时按"沉淀完全"处理。
+- 几种沉淀能同时生成时，溶解度（由 Ksp 算出）最小的先沉淀；固体遇到能生成溶解度小 3 倍以上的物质的离子时发生沉淀转化。
+- 固体沉淀所在溶液 Q < Ksp（如加水）时会溶解一部分或全部。
+- 没有 `ksp` 的行：难溶的直接完全沉淀，微溶的按约 0.02 mol/L 的溶解上限处理。
+
 ### 3.4 特殊反应 `REACTIONS`（`data/reactions.js`）
 
 规则推不出来的反应（燃烧、分解、催化、浓酸、双水解等）都写在这里。
@@ -119,6 +126,8 @@ const beaker = {
 ```js
 createBeaker(id, label, waterMl = 50) -> beaker
 addSubstance(beaker, substanceId, moles, data, options = {}) -> beaker
+  // options.volumeMl：以溶液加入时这份溶液的体积（mL），按水加进烧杯，用来算离子浓度。
+  //   界面自己算好 moles（= 浓度 × 体积），固体和气体不传或传 0。不传时和以前一样只加溶质。
   // 按 SUBSTANCES 的 ions/soluble/state 放入对应位置。
   // options.form === 's'，或烧杯里没有水（H2O < 0.05 mol，约 1 mL）时，常温为固体的试剂留在 solids（不溶解电离），以便加热分解（KClO3、KMnO4、NaHCO3、NH4Cl…）。
 pour(from, to, fraction = 1) -> { from, to }               // 按比例转移 ions/dissolved/liquids/solids

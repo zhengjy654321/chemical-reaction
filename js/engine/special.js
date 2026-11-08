@@ -1,6 +1,6 @@
 // 特殊反应规则（B 负责）：按 data/reactions.js 的 REACTIONS 匹配。
 import { clone, addTo } from '../state.js';
-import { amountOf, addProduct, formulaOf, markFor, aqTerm, molTerm, counterIon, charge, marks } from './common.js';
+import { amountOf, addProduct, formulaOf, markFor, aqTerm, molTerm, counterIon, charge, marks, sinkOf } from './common.js';
 import { balance } from '../equation.js';
 
 const CONDITION_LABEL = { none: '', heat: '加热', ignite: '点燃', electrolysis: '通电' };
@@ -31,13 +31,17 @@ function sideTerms(obj, data, A, C) {
   const ions = Object.entries(obj).filter(([id]) => data.IONS[id]);
   const out = Object.keys(obj).filter(id => !data.IONS[id]).map(id => molTerm(id, data));
   const cs = ions.filter(([id]) => charge(id, data) > 0), as = ions.filter(([id]) => charge(id, data) < 0);
+  const pairTerm = (c, a) => {
+    const sink = sinkOf(c, a, data, false);
+    return sink && sink.length === 1 ? molTerm(sink[0], data) : aqTerm(c, a, data);
+  };
   if (cs.length === 1 && as.length === 1 && cs[0][1] * charge(cs[0][0], data) === -as[0][1] * charge(as[0][0], data)) {
-    return [...out, aqTerm(cs[0][0], as[0][0], data)];
+    return [...out, pairTerm(cs[0][0], as[0][0])];
   }
   for (const [id] of ions) {
     const pair = charge(id, data) > 0 ? A : C;
     if (!pair) return null;
-    out.push(charge(id, data) > 0 ? aqTerm(id, A, data) : aqTerm(C, id, data));
+    out.push(charge(id, data) > 0 ? pairTerm(id, A) : pairTerm(C, id));
   }
   return out;
 }

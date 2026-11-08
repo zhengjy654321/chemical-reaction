@@ -29,6 +29,8 @@ export function addSubstance(beaker, substanceId, moles, data, options = {}) {
   const b = clone(beaker);
   const sub = data.SUBSTANCES[substanceId];
   if (!sub) throw new Error(`未知物质: ${substanceId}`);
+  // options.volumeMl：以溶液形式加入时这份溶液的体积，按水计入烧杯（离子浓度 = 物质的量 / 水的体积）。
+  if (options.volumeMl > 0 && options.form !== 's' && sub.state !== 'g') addTo(b.liquids, 'H2O', options.volumeMl / 18);
   const keepSolid = sub.state === 's' && (options.form === 's' || !hasWater(b));
   if (keepSolid) {
     addTo(b.solids, substanceId, moles);
