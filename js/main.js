@@ -75,7 +75,7 @@ function addReagent(isDrop) {
   } catch (err) {
     logEntry('加入失败', [], err.message); return draw();
   }
-  const conc = st.mode === 'aq' ? ` ${st.conc} mol/L ` : '';
+  const conc = st.mode === 'aq' ? ` ${st.conc} mol/L ` : ' ';
   const what = solid ? r.name + '固体' : reagentLabel(r);
   const verb = isDrop ? `滴加 1 滴${conc}${what}` : st.mode === 'g' ? `通入 ${st.value} mL ${what}` : `加入 ${st.value} ${st.m.unit}${conc}${what}`;
   act(`向 ${app.beakers[i].label} ${verb}`, i);
