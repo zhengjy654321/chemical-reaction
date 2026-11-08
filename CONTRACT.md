@@ -112,7 +112,7 @@ const beaker = {
 };
 ```
 **气体规则**：`react()` 开始时，先从 `gases` 去掉上一次记在 `escaping` 里的量（已经逸出）；剩下的（用户用 `addSubstance` 通入、还没反应完的气体，如 CO₂、H₂、O₂）作为反应物参加反应。本次 `react()` 里生成的气体不再参加本次反应（防止 Ca(HCO₃)₂ 分解出的 CO₂ 又把它溶回去），结束时与剩余气体一起放在 `gases` 里，生成的部分同时记进 `escaping`。界面画"冒气泡"可以用 `escaping`，画"瓶里还有气体"用 `gases`。
-数量小于 `1e-9` mol 视为 0 并删除。
+数量小于 `1e-9` mol 视为 0 并删除。没有水（H₂O < 0.05 mol）时，反应生成的可溶固体（如干试管里 KClO₃ 分解得到的 KCl）留在 `solids`，不拆成离子。
 
 ### `js/state.js`（B）
 
@@ -120,7 +120,7 @@ const beaker = {
 createBeaker(id, label, waterMl = 50) -> beaker
 addSubstance(beaker, substanceId, moles, data, options = {}) -> beaker
   // 按 SUBSTANCES 的 ions/soluble/state 放入对应位置。
-  // options.form === 's'，或烧杯里没有水时，常温为固体的试剂留在 solids（不溶解电离），以便加热分解（KClO3、KMnO4、NaHCO3、NH4Cl…）。
+  // options.form === 's'，或烧杯里没有水（H2O < 0.05 mol，约 1 mL）时，常温为固体的试剂留在 solids（不溶解电离），以便加热分解（KClO3、KMnO4、NaHCO3、NH4Cl…）。
 pour(from, to, fraction = 1) -> { from, to }               // 按比例转移 ions/dissolved/liquids/solids
 filter(beaker) -> { filtrate, residue }                    // filtrate 去掉 solids；residue 是 solids 对象
 isEmpty(beaker) -> boolean

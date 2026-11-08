@@ -65,8 +65,8 @@ for (const x of EXTRA_IONS) if (!IONS[x.id]) IONS[x.id] = x;
 if (!IONS['ClO3^-']) IONS['ClO3^-'] = ion('ClO3^-', 'ClO3', -1, '氯酸根离子');
 const INSOLUBLE = [...DATA.INSOLUBLE];
 for (const r of EXTRA_INSOLUBLE) if (!INSOLUBLE.some(x => x.cation === r.cation && x.anion === r.anion)) INSOLUBLE.push(r);
-// 测试用的特殊反应排在仓库数据之后（id 加 t- 前缀，不和 A 的冲突）；
-// 和仓库数据重复的反应以仓库数据为准（它们先匹配）。
-const REACTIONS = [...DATA.REACTIONS, ...EXTRA_REACTIONS];
+// 特殊反应只用这里的几条：规则测试要测的是引擎规则本身，不让 A 的特殊反应表（优先匹配）盖住。
+// A 的数据与引擎合在一起的效果由 rules.test.js 末尾的"真实数据"测试检查。
+const REACTIONS = EXTRA_REACTIONS;
 
 export const TDATA = { SUBSTANCES, IONS, INSOLUBLE, REACTIONS };

@@ -1,5 +1,5 @@
 // 引擎内部共用工具（B 负责）。
-import { EPS, addTo, clone } from '../state.js';
+import { EPS, addTo, clone, hasWater } from '../state.js';
 import { balance, parseFormula } from '../equation.js';
 
 // 在烧杯中查找某个物质/离子 id 的数量，及其所在的相。
@@ -25,10 +25,12 @@ export function formulaOf(id, data) {
   return data.IONS[id] ? id : (data.SUBSTANCES[id]?.formula ?? id);
 }
 
-// 把生成物放进烧杯：可溶强电解质拆成离子，其余按 phaseFor 放。
+// 把生成物放进烧杯：有水时可溶强电解质拆成离子；没水时常温固体留作固体；其余按 phaseFor 放。
 export function addProduct(beaker, id, moles, data) {
   const s = data.SUBSTANCES[id];
-  if (s && s.ions && s.soluble) {
+  if (s && s.state === 's' && (s.ions || s.soluble) && !hasWater(beaker)) {
+    addTo(beaker.solids, id, moles);
+  } else if (s && s.ions && s.soluble) {
     for (const [ion, k] of Object.entries(s.ions)) addTo(beaker.ions, ion, k * moles);
   } else {
     addTo(beaker[phaseFor(id, data)], id, moles);
@@ -156,7 +158,7 @@ function mergeTerms(list) {
 
 const phaseOfTerm = (t, data) => (t.ion ? 'ions' : t.ions ? 'aq' : t.solid ? 'solids' : phaseFor(t.id, data));
 
-function marks(terms, from, data) {
+export function marks(terms, from, data) {
   const fromPhases = from.map(t => phaseOfTerm(t, data));
   return terms.map(t => {
     const p = phaseOfTerm(t, data);

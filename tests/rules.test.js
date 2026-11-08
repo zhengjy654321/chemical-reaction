@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TDATA as D } from './fixtures/engine-data.js';
+import { DATA } from '../js/data.js';
 import { createBeaker, addSubstance } from '../js/state.js';
 import { react } from '../js/engine/index.js';
 import { formatEquation, checkConservation } from '../js/equation.js';
@@ -138,7 +139,7 @@ test('约定：通入的气体能反应（CO2 使澄清石灰水变浑浊）', (
 test('约定：本次生成的气体不再参加本次反应，下次 react 前清掉', () => {
   // 加热 Ca(HCO3)2 放出 CO2；CO2 不能再和 CaCO3、H2O 生成 Ca(HCO3)2。
   const r = run([['Ca(HCO3)2', 0.01]], { heated: true });
-  assert.equal(r.events.length, 1);
+  assert.ok(!r.events.some(e => e.reactionId === 't-caco3-co2'));
   assert.ok(close(r.beaker.gases.CO2, 0.01));
   const r2 = react(r.beaker, { data: D });
   assert.equal(r2.events.length, 0);
@@ -165,6 +166,8 @@ test('约定：addSubstance 的 form: "s" 或没有水时固体不溶解', () =>
   b = addSubstance(addSubstance(createBeaker('b', 'b', 0), 'KClO3', 0.02, D), 'MnO2', 0.001, D);
   const r = react(b, { data: D, heated: true });
   assert.equal(eq(r.events[0]), '2KClO₃ =MnO₂、加热= 2KCl + 3O₂↑');
+  assert.ok(close(r.beaker.solids.KCl, 0.02), '干试管里生成的 KCl 是固体');
+  assert.deepEqual(r.beaker.ions, {});
 });
 
 test('约定：特殊反应的 conditionText 显示为条件', () => {
@@ -172,4 +175,42 @@ test('约定：特殊反应的 conditionText 显示为条件', () => {
   const b = addSubstance(createBeaker('b', 'b', 0), 'CaCO3', 0.01, D);
   const r = react(b, { data, heated: true });
   assert.equal(eq(r.events[0]), 'CaCO₃ =高温= CaO + CO₂↑');
+});
+
+// ---------- 真实数据（A 的物质表和特殊反应表）与引擎合在一起 ----------
+const has = items => items.every(([id]) => DATA.SUBSTANCES[id]);
+function runReal(items, ctx = {}) {
+  let b = createBeaker('b', 'b');
+  for (const [id, n, opt] of items) b = addSubstance(b, id, n, DATA, opt);
+  return react(b, { data: DATA, ...ctx });
+}
+
+test('真实数据：不该发生的反应', () => {
+  const none = [
+    [['Cu', 0.01], ['HCl', 0.02]], [['Ag', 0.01], ['H2SO4', 0.01]], [['Ag', 0.01], ['CuSO4', 0.01]],
+    [['Cu', 0.01], ['FeSO4', 0.01]], [['NaCl', 0.01], ['H2SO4', 0.01]], [['NaCl', 0.01], ['KNO3', 0.01]],
+    [['BaSO4', 0.01, { form: 's' }], ['HCl', 0.02]], [['AgCl', 0.01, { form: 's' }], ['HNO3', 0.02]],
+  ];
+  for (const items of none.filter(has)) {
+    const { events } = runReal(items);
+    assert.equal(events.length, 0, items.map(x => x[0]).join(' + ') + ' 不应反应：' + events.map(e => e.reactionId || e.kind).join(','));
+  }
+});
+
+test('真实数据：常见实验每个事件都守恒，并且有分子或离子方程式', () => {
+  const mixes = [
+    [['BaCl2', 0.01], ['H2SO4', 0.01]], [['CuSO4', 0.01], ['NaOH', 0.02]], [['Na2CO3', 0.01], ['HCl', 0.02]],
+    [['CaCO3', 0.01], ['HCl', 0.02]], [['Zn', 0.01], ['H2SO4', 0.01]], [['Fe', 0.01], ['CuSO4', 0.01]],
+    [['Na', 0.01]], [['CaO', 0.001]], [['NaHCO3', 0.01], ['HCl', 0.01]], [['Ca(OH)2', 0.0005], ['CO2', 0.0005]],
+    [['Cu', 0.01], ['HNO3', 0.04]], [['Fe2O3', 0.01], ['HCl', 0.06]], [['NH4Cl', 0.01], ['NaOH', 0.01]],
+  ];
+  for (const items of mixes.filter(has)) {
+    for (const heated of [false, true]) {
+      const { events } = runReal(items, { heated });
+      for (const e of events) {
+        assert.ok(e.equation || e.ionic, `${items.map(x => x[0]).join('+')}: ${e.reactionId || e.kind} 没有方程式`);
+        for (const x of [e.equation, e.ionic]) if (x) assert.ok(checkConservation(x).ok, `${e.reactionId || e.kind}: ${formatEquation(x)}`);
+      }
+    }
+  }
 });

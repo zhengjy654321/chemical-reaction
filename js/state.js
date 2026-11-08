@@ -1,6 +1,9 @@
 // 烧杯状态的纯函数操作（B 负责）。约定见 CONTRACT.md 第 4 节。
 
 export const EPS = 1e-9;
+// 少于这么多水（mol，约 1 mL）视为"没有水"：固体不溶解，生成的可溶物也留作固体（如干试管里加热 KClO3 得到 KCl 固体）。
+export const WATER_MIN = 0.05;
+export const hasWater = b => (b.liquids.H2O || 0) >= WATER_MIN;
 const PHASES = ['ions', 'dissolved', 'liquids', 'solids', 'gases'];
 
 export function createBeaker(id, label, waterMl = 50) {
@@ -26,7 +29,7 @@ export function addSubstance(beaker, substanceId, moles, data, options = {}) {
   const b = clone(beaker);
   const sub = data.SUBSTANCES[substanceId];
   if (!sub) throw new Error(`未知物质: ${substanceId}`);
-  const keepSolid = sub.state === 's' && (options.form === 's' || !(b.liquids.H2O > EPS));
+  const keepSolid = sub.state === 's' && (options.form === 's' || !hasWater(b));
   if (keepSolid) {
     addTo(b.solids, substanceId, moles);
   } else if (sub.ions) {
